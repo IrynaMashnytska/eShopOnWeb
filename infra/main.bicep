@@ -1,144 +1,207 @@
-targetScope = 'subscription'
+// infra/main.bicep
+// ──────────────────────────────────────────────
+// MAIN FILE - This is the ORCHESTRATOR
+// It calls all modules in the right order
+// ──────────────────────────────────────────────
 
-@minLength(1)
-@maxLength(64)
-@description('Name of the the environment which is used to generate a short unique hash used in all resources.')
-param environmentName string
+targetScope = 'subscription'     
 
-@minLength(1)
-@description('Primary location for all resources')
-param location string
-
-// Optional parameters to override the default azd resource naming conventions. Update the main.parameters.json file to provide values. e.g.,:
-// "resourceGroupName": {
-//      "value": "myGroupName"
-// }
-param resourceGroupName string = ''
-param webServiceName string = ''
-param catalogDatabaseName string = 'catalogDatabase'
-param catalogDatabaseServerName string = ''
-param identityDatabaseName string = 'identityDatabase'
-param identityDatabaseServerName string = ''
-param appServicePlanName string = ''
-param keyVaultName string = ''
-
-@description('Id of the user or app to assign application roles')
-param principalId string = ''
 
 @secure()
-@description('SQL Server administrator password')
-param sqlAdminPassword string
 
-@secure()
-@description('Application user password')
-param appUserPassword string
+@allowed(['dev', 'staging', 'prod'])
+param environment string = 'prod'
 
-var abbrs = loadJsonContent('./abbreviations.json')
-var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
-var tags = { 'azd-env-name': environmentName }
+param projectName string = 'eshop'
 
-// Organize resources in a resource group
-resource rg 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: !empty(resourceGroupName) ? resourceGroupName : '${abbrs.resourcesResourceGroups}${environmentName}'
-  location: location
-  tags: tags
+param locationEastUS string = 'eastus'
+param locationWestEU string = 'westeurope'
+
+@allowed(['S1', 'S2'])
+param appServiceSku string = 'S1'
+
+
+// ──────────────────────────────────────────────
+// VARIABLES
+// ──────────────────────────────────────────────
+
+// Create a short unique suffix based on subscription ID
+// uniqueString() always returns same value for same input
+// take() gets first 6 characters: 'a1b2c3'
+var suffix = toLower(take(uniqueString(subscription().subscriptionId), 6))
+
+// Resource Group names
+var rgEastUS = 'rg-${projectName}-eus-${environment}'
+var rgWestEU = 'rg-${projectName}-weu-${environment}'
+var rgShared = 'rg-${projectName}-shared-${environment}'
+
+
+// ──────────────────────────────────────────────
+// STEP 1: CREATE RESOURCE GROUPS
+// Must happen first! Everything else goes inside these
+// ──────────────────────────────────────────────
+
+resource rgEastUSResource 'Microsoft.Resources/resourceGroups@2023-07-01' = {
+  name: rgEastUS
+  location: locationEastUS
+  tags: {
+    environment: environment
+    project: projectName
+    managedBy: 'bicep'
+  }
 }
 
-// The application frontend
-module web './core/host/appservice.bicep' = {
-  name: 'web'
-  scope: rg
+resource rgWestEUResource 'Microsoft.Resources/resourceGroups@2023-07-01' = {
+  name: rgWestEU
+  location: locationWestEU
+  tags: {
+    environment: environment
+    project: projectName
+    managedBy: 'bicep'
+  }
+}
+
+resource rgSharedResource 'Microsoft.Resources/resourceGroups@2023-07-01' = {
+  name: rgShared
+  location: locationEastUS       // Shared resources in East US
+  tags: {
+    environment: environment
+    project: projectName
+    managedBy: 'bicep'
+  }
+}
+
+
+module planEastUS 'modules/appservice-plan.bicep' = {
+  name: 'deploy-plan-eastus'
+  scope: rgEastUSResource
   params: {
-    name: !empty(webServiceName) ? webServiceName : '${abbrs.webSitesAppService}web-${resourceToken}'
-    location: location
-    appServicePlanId: appServicePlan.outputs.id
-    keyVaultName: keyVault.outputs.name
-    runtimeName: 'dotnetcore'
-    runtimeVersion: '8.0'
-    tags: union(tags, { 'azd-service-name': 'web' })
-    appSettings: {
-      AZURE_SQL_CATALOG_CONNECTION_STRING_KEY: 'AZURE-SQL-CATALOG-CONNECTION-STRING'
-      AZURE_SQL_IDENTITY_CONNECTION_STRING_KEY: 'AZURE-SQL-IDENTITY-CONNECTION-STRING'
-      AZURE_KEY_VAULT_ENDPOINT: keyVault.outputs.endpoint
+    location: locationEastUS
+    projectName: projectName
+    environment: environment
+    regionShort: 'eus'
+    sku: appServiceSku
+    tags: {
+      environment: environment
+      region: locationEastUS
     }
   }
 }
 
-module apiKeyVaultAccess './core/security/keyvault-access.bicep' = {
-  name: 'api-keyvault-access'
-  scope: rg
+module webAppEastUS 'modules/webApp.bicep' = {
+  name: 'deploy-webapp-eastus'
+  scope: rgEastUSResource
   params: {
-    keyVaultName: keyVault.outputs.name
-    principalId: web.outputs.identityPrincipalId
-  }
-}
-
-// The application database: Catalog
-module catalogDb './core/database/sqlserver/sqlserver.bicep' = {
-  name: 'sql-catalog'
-  scope: rg
-  params: {
-    name: !empty(catalogDatabaseServerName) ? catalogDatabaseServerName : '${abbrs.sqlServers}catalog-${resourceToken}'
-    databaseName: catalogDatabaseName
-    location: location
-    tags: tags
-    sqlAdminPassword: sqlAdminPassword
-    appUserPassword: appUserPassword
-    keyVaultName: keyVault.outputs.name
-    connectionStringKey: 'AZURE-SQL-CATALOG-CONNECTION-STRING'
-  }
-}
-
-// The application database: Identity
-module identityDb './core/database/sqlserver/sqlserver.bicep' = {
-  name: 'sql-identity'
-  scope: rg
-  params: {
-    name: !empty(identityDatabaseServerName) ? identityDatabaseServerName : '${abbrs.sqlServers}identity-${resourceToken}'
-    databaseName: identityDatabaseName
-    location: location
-    tags: tags
-    sqlAdminPassword: sqlAdminPassword
-    appUserPassword: appUserPassword
-    keyVaultName: keyVault.outputs.name
-    connectionStringKey: 'AZURE-SQL-IDENTITY-CONNECTION-STRING'
-  }
-}
-
-// Store secrets in a keyvault
-module keyVault './core/security/keyvault.bicep' = {
-  name: 'keyvault'
-  scope: rg
-  params: {
-    name: !empty(keyVaultName) ? keyVaultName : '${abbrs.keyVaultVaults}${resourceToken}'
-    location: location
-    tags: tags
-    principalId: principalId
-  }
-}
-
-// Create an App Service Plan to group applications under the same payment plan and SKU
-module appServicePlan './core/host/appserviceplan.bicep' = {
-  name: 'appserviceplan'
-  scope: rg
-  params: {
-    name: !empty(appServicePlanName) ? appServicePlanName : '${abbrs.webServerFarms}${resourceToken}'
-    location: location
-    tags: tags
-    sku: {
-      name: 'B1'
+    location: locationEastUS
+    projectName: projectName
+    environment: environment
+    regionShort: 'eus'
+    suffix: suffix
+    appServicePlanId: planEastUS.outputs.planId
+    enableDeploymentSlot: true                         // ← Enable for East US
+    tags: {
+      environment: environment
+      region: locationEastUS
+      component: 'web'
     }
   }
 }
 
-// Data outputs
-output AZURE_SQL_CATALOG_CONNECTION_STRING_KEY string = catalogDb.outputs.connectionStringKey
-output AZURE_SQL_IDENTITY_CONNECTION_STRING_KEY string = identityDb.outputs.connectionStringKey
-output AZURE_SQL_CATALOG_DATABASE_NAME string = catalogDb.outputs.databaseName
-output AZURE_SQL_IDENTITY_DATABASE_NAME string = identityDb.outputs.databaseName
+// ──────────────────────────────────────────────
+// STEP 6: WEST EUROPE - APP SERVICE PLAN
+// ──────────────────────────────────────────────
 
-// App outputs
-output AZURE_LOCATION string = location
-output AZURE_TENANT_ID string = tenant().tenantId
-output AZURE_KEY_VAULT_ENDPOINT string = keyVault.outputs.endpoint
-output AZURE_KEY_VAULT_NAME string = keyVault.outputs.name
+module planWestEU 'modules/appservice-plan.bicep' = {
+  name: 'deploy-plan-westeu'
+  scope: rgWestEUResource
+  params: {
+    location: locationWestEU
+    projectName: projectName
+    environment: environment
+    regionShort: 'weu'
+    sku: appServiceSku
+    tags: {
+      environment: environment
+      region: locationWestEU
+    }
+  }
+}
+
+
+module webAppWestEU 'modules/webApp.bicep' = {
+  name: 'deploy-webapp-westeu'
+  scope: rgWestEUResource
+  params: {
+    location: locationWestEU
+    projectName: projectName
+    environment: environment
+    regionShort: 'weu'
+    suffix: '${suffix}eu'
+    appServicePlanId: planWestEU.outputs.planId
+    enableDeploymentSlot: false                        // ← No slot here
+    tags: {
+      environment: environment
+      region: locationWestEU
+      component: 'web'
+    }
+  }
+}
+
+module publicApi 'modules/publicApi.bicep' = {
+  name: 'deploy-api-westeu'
+  scope: rgWestEUResource
+  params: {
+    location: locationWestEU
+    projectName: projectName
+    suffix: '${suffix}eu'
+    appServicePlanId: planWestEU.outputs.planId
+    appServicePlanName: planWestEU.outputs.planName
+    minInstances: 1
+    maxInstances: 5
+    cpuScaleOut: 70
+    cpuScaleIn: 30
+    tags: {
+      environment: environment
+      region: locationWestEU
+      component: 'api'
+    }
+  }
+}
+
+
+module trafficManager 'modules/trafficManager.bicep' = {
+  name: 'deploy-traffic-manager'
+  scope: rgSharedResource             // In shared RG
+  params: {
+    projectName: projectName
+    environment: environment
+    suffix: suffix
+    webAppEastUSId: webAppEastUS.outputs.webAppId       // ← From webApp module
+    webAppWestEUID: webAppWestEU.outputs.webAppId        // ← From webApp module
+    webAppEastUSHostname: webAppEastUS.outputs.webAppHostname
+    webAppWestEUHostname: webAppWestEU.outputs.webAppHostname
+    routingMethod: 'Performance'
+    tags: {
+      environment: environment
+      component: 'traffic-manager'
+    }
+  }
+}
+
+
+output summary object = {
+  webEastUS: {
+    production: 'https://${webAppEastUS.outputs.webAppHostname}'
+    staging: 'https://${webAppEastUS.outputs.stagingHostname}'
+  }
+  webWestEU: {
+    production: 'https://${webAppWestEU.outputs.webAppHostname}'
+  }
+  publicApi: {
+    url: 'https://${publicApi.outputs.apiHostname}'
+    autoscale: publicApi.outputs.autoscaleName
+  }
+  trafficManager: {
+    url: 'http://${trafficManager.outputs.tmFqdn}'
+  }
+}
