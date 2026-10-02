@@ -44,7 +44,7 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'UseOnlyInMemoryDatabase'
-          value: 'false'           // Use real SQL, not in-memory
+          value: 'true'           // Use real SQL, not in-memory
         }
         {
           name: 'REGION'
