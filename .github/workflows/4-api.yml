@@ -2,7 +2,7 @@ name: 4 - Deploy Public API
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - 'src/PublicApi/**'
       - 'src/Core/**'

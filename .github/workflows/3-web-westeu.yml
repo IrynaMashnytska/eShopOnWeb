@@ -2,7 +2,7 @@ name: 3 - Deploy Web App West Europe
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - 'src/Web/**'
       - 'src/Core/**'

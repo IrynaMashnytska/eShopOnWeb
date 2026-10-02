@@ -1,9 +1,8 @@
-# .github/workflows/2-web-eastus.yml
 name: 2 - Deploy Web App East US (with Slot Swap)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - 'src/Web/**'
       - 'src/Core/**'
@@ -16,9 +15,6 @@ env:
   TEST_PATH: 'tests/UnitTests/UnitTests.csproj'
 
 jobs:
-  # ───────────────────────────────────────────
-  # JOB 1: Build and Test
-  # ───────────────────────────────────────────
   build:
     name: 🔨 Build & Test
     runs-on: ubuntu-latest
