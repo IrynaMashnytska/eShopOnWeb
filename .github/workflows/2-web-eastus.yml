@@ -46,15 +46,6 @@ jobs:
           --logger "trx;LogFileName=test-results.trx" \
           --results-directory ./test-results
 
-    - name: 📊 Publish Test Results
-      uses: dorny/test-reporter@v1
-      if: always()               # Run even if tests fail
-      with:
-        name: Test Results
-        path: '**/test-results.trx'
-        reporter: dotnet-trx
-        fail-on-error: true
-
     - name: 📤 Publish App
       run: |
         dotnet publish ${{ env.PROJECT_PATH }} \
