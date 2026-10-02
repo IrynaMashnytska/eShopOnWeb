@@ -77,18 +77,12 @@ jobs:
         DEPLOY_NAME="eshop-infra-$(date +%Y%m%d-%H%M%S)"
         echo "deploy_name=$DEPLOY_NAME" >> $GITHUB_OUTPUT
 
-        echo "Starting deployment: $DEPLOY_NAME"
-
-        # Deploy and capture output
-        RESULT=$(az deployment sub create \
+        az deployment sub create \
           --name "$DEPLOY_NAME" \
           --location ${{ env.LOCATION }} \
           --template-file infra/main.bicep \
           --parameters infra/main.bicepparam \
-          --query 'properties.outputs.summary.value' \
-          --output json)
 
-        echo "outputs=$RESULT" >> $GITHUB_OUTPUT
         echo "✅ Infrastructure deployed!"
 
     - name: 📋 Show Deployment Results
