@@ -1,0 +1,103 @@
+name: 3 - Deploy Web App West Europe
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/Web/**'
+      - 'src/Core/**'
+      - 'src/Infrastructure/**'
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  PROJECT_PATH: 'src/Web/Web.csproj'
+
+jobs:
+  build:
+    name: 🔨 Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Build & Publish
+      run: |
+        dotnet restore ${{ env.PROJECT_PATH }}
+        dotnet build ${{ env.PROJECT_PATH }} \
+          --configuration Release \
+          --no-restore
+        dotnet publish ${{ env.PROJECT_PATH }} \
+          --configuration Release \
+          --no-build \
+          --output ./publish
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: web-westeu-build-${{ github.sha }}
+        path: ./publish
+        retention-days: 1
+
+  deploy:
+    name: 🌍 Deploy West Europe
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: production-westeu
+      url: ${{ steps.deploy.outputs.webapp-url }}
+
+    steps:
+    - name: 📥 Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: web-westeu-build-${{ github.sha }}
+        path: ./publish
+
+    - name: 🔐 Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 🔍 Get App Name
+      id: get_app
+      run: |
+        APP_NAME=$(az webapp list \
+          --resource-group rg-eshop-weu-prod \
+          --query "[?contains(name,'web-eshop-weu')].name" \
+          --output tsv)
+        echo "app_name=$APP_NAME" >> $GITHUB_OUTPUT
+        echo "Deploying to: $APP_NAME"
+
+    - name: 🚀 Deploy to West Europe
+      id: deploy
+      uses: azure/webapps-deploy@v3
+      with:
+        app-name: ${{ steps.get_app.outputs.app_name }}
+        package: ./publish
+
+    - name: 🔍 Health Check
+      run: |
+        APP_NAME="${{ steps.get_app.outputs.app_name }}"
+        URL="https://${APP_NAME}.azurewebsites.net"
+
+        sleep 20
+
+        for i in {1..5}; do
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 15 --location "$URL")
+
+          if [[ "$STATUS" == "200" ]] || [[ "$STATUS" == "302" ]]; then
+            echo "✅ West EU healthy: $URL"
+            exit 0
+          fi
+          echo "Attempt $i failed ($STATUS), retrying..."
+          sleep 15
+        done
+
+        echo "❌ Health check failed!"
+        exit 1
