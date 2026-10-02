@@ -69,16 +69,6 @@ resource webConfig 'Microsoft.Web/sites/config@2022-09-01' = {
   }
 }
 
-// ──────────────────────────────────────────────
-// STAGING SLOT
-// Only created if enableDeploymentSlot = true
-//
-// HOW SLOTS WORK:
-// Production → web-eshop-eus-abc123.azurewebsites.net
-// Staging    → web-eshop-eus-abc123-staging.azurewebsites.net
-//
-// Deploy to staging → test → swap → live!
-// ──────────────────────────────────────────────
 
 resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeploymentSlot) {
   parent: webApp
@@ -111,13 +101,6 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeployme
     }
   }
 }
-
-// ──────────────────────────────────────────────
-// SLOT SETTINGS - These DON'T swap with production
-// When you swap staging→production:
-// - Code swaps ✅
-// - These settings STAY on their slot ✅
-// ──────────────────────────────────────────────
 
 resource slotConfig 'Microsoft.Web/sites/config@2022-09-01' = if (enableDeploymentSlot) {
   parent: webApp
