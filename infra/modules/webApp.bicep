@@ -9,11 +9,22 @@ param suffix string
 @description('ID of the App Service Plan to use')
 param appServicePlanId string
 
+@description('Absolute base URL of the Public API, including trailing slash')
+param apiBaseUrl string
+
 param enableDeploymentSlot bool = false
 
 param tags object = {}
 
-var webAppName = 'web-${projectName}-${regionShort}-${suffix}'
+// Keeps prod names unchanged while separating dev/staging deployments in the same subscription
+// (site names are globally unique, and `suffix` is subscription-wide).
+var envSuffix = environment == 'prod' ? '' : '-${environment}'
+
+var webAppName = 'web-${projectName}-${regionShort}${envSuffix}-${suffix}'
+
+// Self-referential, so derived from the name rather than the resource to avoid a cycle
+var webBaseUrl    = 'https://${webAppName}.azurewebsites.net/'
+var slotBaseUrl   = 'https://${webAppName}-staging.azurewebsites.net/'
 
 resource webApp 'Microsoft.Web/sites@2022-09-01' = {
   name: webAppName
@@ -36,6 +47,10 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
       minTlsVersion: '1.2'          // Security: no old TLS
       http20Enabled: true           // Use HTTP/2
 
+      // Set here rather than via a child 'web' config resource: that resource issues a full PUT of
+      // the web config and would reset the siteConfig values above to their defaults.
+      healthCheckPath: '/liveness'
+
       // ── APP SETTINGS ────────────────────────
       appSettings: [
         {
@@ -44,35 +59,24 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'UseOnlyInMemoryDatabase'
-          value: 'true'           // Use real SQL, not in-memory
+          value: 'true'           // No database is deployed: EF Core uses in-memory stores
         }
         {
           name: 'REGION'
           value: location          // Useful for debugging
         }
         {
-          name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Development'          // Useful for debugging
+          name: 'baseUrls__apiBase'
+          value: apiBaseUrl        // Without this the app falls back to localhost and /health fails
+        }
+        {
+          name: 'baseUrls__webBase'
+          value: webBaseUrl
         }
       ]
     }
   }
 }
-
-// ──────────────────────────────────────────────
-// HEALTH CHECK
-// Traffic Manager needs this to check if app is up
-// You need to add /health endpoint in your code
-// ──────────────────────────────────────────────
-
-resource webConfig 'Microsoft.Web/sites/config@2022-09-01' = {
-  parent: webApp
-  name: 'web'
-  properties: {
-    healthCheckPath: '/health'
-  }
-}
-
 
 resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeploymentSlot) {
   parent: webApp
@@ -88,10 +92,11 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeployme
     siteConfig: {
       netFrameworkVersion: 'v8.0'
       alwaysOn: true
+      healthCheckPath: '/liveness'
       appSettings: [
         {
           name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Staging'       
+          value: 'Staging'
         }
         {
           name: 'UseOnlyInMemoryDatabase'
@@ -102,21 +107,28 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeployme
           value: 'staging'
         }
         {
-          name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Development'          // Useful for debugging
+          name: 'baseUrls__apiBase'
+          value: apiBaseUrl
+        }
+        {
+          name: 'baseUrls__webBase'
+          value: slotBaseUrl
         }
       ]
     }
   }
 }
 
+// Sticky settings: these stay with the slot across a swap, so the slot keeps Staging/staging and
+// its own webBase instead of carrying them into production.
 resource slotConfig 'Microsoft.Web/sites/config@2022-09-01' = if (enableDeploymentSlot) {
   parent: webApp
   name: 'slotConfigNames'
   properties: {
     appSettingNames: [
-      'ASPNETCORE_ENVIRONMENT'  // Staging keeps 'Staging'
-      'SLOT_NAME'               // Staging keeps 'staging'
+      'ASPNETCORE_ENVIRONMENT'
+      'SLOT_NAME'
+      'baseUrls__webBase'
     ]
   }
 }

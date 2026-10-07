@@ -22,8 +22,12 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddConsole();
 
-if (builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Docker"){
-    // Configure SQL Server (local)
+// Keyed off UseOnlyInMemoryDatabase rather than the environment name: the Azure deployment runs
+// Production with no database, and must not fall through to the Key Vault / Azure SQL path below.
+var useOnlyInMemoryDatabase = builder.Configuration.GetValue<bool>("UseOnlyInMemoryDatabase");
+
+if (useOnlyInMemoryDatabase || builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Docker"){
+    // Configure in-memory stores, or SQL Server (local) when UseOnlyInMemoryDatabase is false
     Microsoft.eShopWeb.Infrastructure.Dependencies.ConfigureServices(builder.Configuration, builder.Services);
 }
 else{
@@ -166,6 +170,12 @@ app.UseHealthChecks("/health",
             await context.Response.WriteAsync(result);
         }
     });
+
+// Probe target for the App Service health check and the Traffic Manager monitor. Runs no checks on
+// purpose: it reports only that this instance is serving, so a Public API outage cannot pull both
+// Web regions out of Traffic Manager rotation. Use /health for the full dependency report.
+app.UseHealthChecks("/liveness", new HealthCheckOptions { Predicate = _ => false });
+
 if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Docker")
 {
     app.Logger.LogInformation("Adding Development middleware...");

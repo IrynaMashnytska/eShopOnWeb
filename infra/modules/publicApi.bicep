@@ -2,9 +2,13 @@ targetScope = 'resourceGroup'
 
 param location string
 param projectName string
+param environment string
 param suffix string
 param appServicePlanId string
 param appServicePlanName string
+
+@description('Public base URL the Web front end is served from, used as the CORS origin')
+param webBaseUrl string
 
 // ── AUTOSCALE PARAMETERS ──────────────────────
 // These control when scaling happens
@@ -30,7 +34,10 @@ param tags object = {}
 // VARIABLES
 // ──────────────────────────────────────────────
 
-var apiAppName = 'api-${projectName}-${suffix}'
+// Keeps prod names unchanged while separating dev/staging deployments in the same subscription
+var envSuffix = environment == 'prod' ? '' : '-${environment}'
+
+var apiAppName = 'api-${projectName}${envSuffix}-${suffix}'
 
 resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
   name: apiAppName
@@ -58,7 +65,15 @@ resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'UseOnlyInMemoryDatabase'
-          value: 'true'
+          value: 'true'           // No database is deployed: EF Core uses in-memory stores
+        }
+        {
+          name: 'baseUrls__webBase'
+          value: webBaseUrl        // Drives the app's own CORS policy; localhost otherwise
+        }
+        {
+          name: 'baseUrls__apiBase'
+          value: 'https://${apiAppName}.azurewebsites.net/api/'
         }
       ]
     }

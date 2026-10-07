@@ -7,8 +7,6 @@
 targetScope = 'subscription'     
 
 
-@secure()
-
 @allowed(['dev', 'staging', 'prod'])
 param environment string = 'prod'
 
@@ -19,6 +17,27 @@ param locationWestEU string = 'westeurope'
 
 @allowed(['S1', 'S2'])
 param appServiceSku string = 'S1'
+
+
+// ── PUBLIC API AUTOSCALE ──────────────────────
+// Single source of truth: apiMinInstances is both the autoscale floor and the capacity the West EU
+// plan is deployed with, so `1-infra.yml` can no longer push a value the autoscale rule disagrees
+// with. Note the plan is still set to the floor on every redeploy, so avoid running the infra
+// workflow in the middle of a load test - autoscale will climb back, but not instantly.
+
+@description('Autoscale floor for the Public API plan')
+@minValue(1)
+param apiMinInstances int = 1
+
+@description('Autoscale ceiling for the Public API plan')
+@maxValue(10)
+param apiMaxInstances int = 5
+
+@description('CPU % that triggers scale out')
+param apiCpuScaleOut int = 70
+
+@description('CPU % that triggers scale in')
+param apiCpuScaleIn int = 30
 
 
 // ──────────────────────────────────────────────
@@ -34,6 +53,13 @@ var suffix = toLower(take(uniqueString(subscription().subscriptionId), 6))
 var rgEastUS = 'rg-${projectName}-eus-${environment}'
 var rgWestEU = 'rg-${projectName}-weu-${environment}'
 var rgShared = 'rg-${projectName}-shared-${environment}'
+
+// Traffic Manager DNS label, computed here rather than read from the trafficManager module's output:
+// the API needs the public Web URL for its CORS origin, and the module depends on the Web apps.
+// Deriving the label breaks what would otherwise be api -> tm -> web -> api.
+var envSuffix   = environment == 'prod' ? '' : '-${environment}'
+var tmDnsLabel  = '${projectName}${envSuffix}-${suffix}'
+var tmPublicUrl = 'https://${tmDnsLabel}.trafficmanager.net/'
 
 
 // ──────────────────────────────────────────────
@@ -88,25 +114,6 @@ module planEastUS 'modules/appservice-plan.bicep' = {
   }
 }
 
-module webAppEastUS 'modules/webApp.bicep' = {
-  name: 'deploy-webapp-eastus'
-  scope: rgEastUSResource
-  params: {
-    location: locationEastUS
-    projectName: projectName
-    environment: environment
-    regionShort: 'eus'
-    suffix: suffix
-    appServicePlanId: planEastUS.outputs.planId
-    enableDeploymentSlot: true                         // ← Enable for East US
-    tags: {
-      environment: environment
-      region: locationEastUS
-      component: 'web'
-    }
-  }
-}
-
 // ──────────────────────────────────────────────
 // STEP 6: WEST EUROPE - APP SERVICE PLAN
 // ──────────────────────────────────────────────
@@ -120,6 +127,7 @@ module planWestEU 'modules/appservice-plan.bicep' = {
     environment: environment
     regionShort: 'weu'
     sku: appServiceSku
+    capacity: apiMinInstances          // Matches the autoscale floor below
     tags: {
       environment: environment
       region: locationWestEU
@@ -127,6 +135,52 @@ module planWestEU 'modules/appservice-plan.bicep' = {
   }
 }
 
+
+// Deployed before the Web apps: they need its hostname for baseUrls__apiBase.
+module publicApi 'modules/publicApi.bicep' = {
+  name: 'deploy-api-westeu'
+  scope: rgWestEUResource
+  params: {
+    location: locationWestEU
+    projectName: projectName
+    environment: environment
+    suffix: '${suffix}eu'
+    appServicePlanId: planWestEU.outputs.planId
+    appServicePlanName: planWestEU.outputs.planName
+    webBaseUrl: tmPublicUrl
+    minInstances: apiMinInstances
+    maxInstances: apiMaxInstances
+    cpuScaleOut: apiCpuScaleOut
+    cpuScaleIn: apiCpuScaleIn
+    tags: {
+      environment: environment
+      region: locationWestEU
+      component: 'api'
+    }
+  }
+}
+
+var apiBaseUrl = 'https://${publicApi.outputs.apiHostname}/api/'
+
+module webAppEastUS 'modules/webApp.bicep' = {
+  name: 'deploy-webapp-eastus'
+  scope: rgEastUSResource
+  params: {
+    location: locationEastUS
+    projectName: projectName
+    environment: environment
+    regionShort: 'eus'
+    suffix: suffix
+    appServicePlanId: planEastUS.outputs.planId
+    apiBaseUrl: apiBaseUrl
+    enableDeploymentSlot: true                         // ← Enable for East US
+    tags: {
+      environment: environment
+      region: locationEastUS
+      component: 'web'
+    }
+  }
+}
 
 module webAppWestEU 'modules/webApp.bicep' = {
   name: 'deploy-webapp-westeu'
@@ -138,32 +192,12 @@ module webAppWestEU 'modules/webApp.bicep' = {
     regionShort: 'weu'
     suffix: '${suffix}eu'
     appServicePlanId: planWestEU.outputs.planId
+    apiBaseUrl: apiBaseUrl
     enableDeploymentSlot: false                        // ← No slot here
     tags: {
       environment: environment
       region: locationWestEU
       component: 'web'
-    }
-  }
-}
-
-module publicApi 'modules/publicApi.bicep' = {
-  name: 'deploy-api-westeu'
-  scope: rgWestEUResource
-  params: {
-    location: locationWestEU
-    projectName: projectName
-    suffix: '${suffix}eu'
-    appServicePlanId: planWestEU.outputs.planId
-    appServicePlanName: planWestEU.outputs.planName
-    minInstances: 1
-    maxInstances: 5
-    cpuScaleOut: 70
-    cpuScaleIn: 30
-    tags: {
-      environment: environment
-      region: locationWestEU
-      component: 'api'
     }
   }
 }
@@ -175,7 +209,7 @@ module trafficManager 'modules/trafficManager.bicep' = {
   params: {
     projectName: projectName
     environment: environment
-    suffix: suffix
+    dnsLabel: tmDnsLabel
     webAppEastUSId: webAppEastUS.outputs.webAppId       // ← From webApp module
     webAppWestEUID: webAppWestEU.outputs.webAppId        // ← From webApp module
     webAppEastUSHostname: webAppEastUS.outputs.webAppHostname
@@ -202,6 +236,9 @@ output summary object = {
     autoscale: publicApi.outputs.autoscaleName
   }
   trafficManager: {
-    url: 'http://${trafficManager.outputs.tmFqdn}'
+    // HTTPS, not HTTP: the auth cookie is CookieSecurePolicy.Always, so sign-in silently fails over
+    // plain HTTP. The browser will warn about the certificate - the App Service default cert covers
+    // *.azurewebsites.net, not *.trafficmanager.net - which is expected here.
+    url: 'https://${trafficManager.outputs.tmFqdn}'
   }
 }

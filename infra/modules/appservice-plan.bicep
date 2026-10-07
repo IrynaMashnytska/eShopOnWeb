@@ -12,6 +12,10 @@ param regionShort string
 @allowed(['S1', 'S2', 'S3'])
 param sku string = 'S1'
 
+@description('Instance count to deploy the plan with. For a plan under an autoscale rule, pass the autoscale minimum so a redeploy cannot contradict the rule.')
+@minValue(1)
+param capacity int = 1
+
 param tags object = {}
 
 var skuTierMap = {
@@ -29,9 +33,9 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   location: location
   tags: tags
   sku: {
-    name: sku                    
-    tier: skuTierMap[sku]        
-    capacity: 1               
+    name: sku
+    tier: skuTierMap[sku]
+    capacity: capacity           // Autoscale owns this at runtime; see the note in main.bicep
   }
   properties: {
     reserved: false              // false = Windows OS

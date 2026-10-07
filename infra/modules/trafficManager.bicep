@@ -6,7 +6,9 @@ targetScope = 'resourceGroup'
 
 param projectName string
 param environment string
-param suffix string
+
+@description('DNS label for the profile, e.g. eshop-abc123 -> eshop-abc123.trafficmanager.net. Passed in so callers can derive the public URL without depending on this module.')
+param dnsLabel string
 
 @description('Resource ID of East US Web App')
 param webAppEastUSId string
@@ -44,7 +46,7 @@ param tags object = {}
 
 
 var tmProfileName = 'tm-${projectName}-${environment}'
-var tmDnsName     = '${projectName}-${suffix}'
+var tmDnsName     = dnsLabel
 // Result URL: eshop-abc123.trafficmanager.net
 
 
@@ -67,7 +69,7 @@ resource tmProfile 'Microsoft.Network/trafficManagerProfiles@2022-04-01' = {
     monitorConfig: {
       protocol: 'HTTPS'
       port: 443
-      path: '/health'            // Must exist in your app!
+      path: '/liveness'          // App-only check: an API outage must not degrade both Web regions
       intervalInSeconds: 30      // Check every 30s
       timeoutInSeconds: 10       // Wait 10s for response
       toleratedNumberOfFailures: 3  // 3 failures = endpoint down
