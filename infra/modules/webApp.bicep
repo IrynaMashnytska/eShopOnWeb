@@ -50,6 +50,10 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'REGION'
           value: location          // Useful for debugging
         }
+        {
+          name: 'ASPNETCORE_ENVIRONMENT'
+          value: 'Development'          // Useful for debugging
+        }
       ]
     }
   }
@@ -96,6 +100,10 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeployme
         {
           name: 'SLOT_NAME'
           value: 'staging'
+        }
+        {
+          name: 'ASPNETCORE_ENVIRONMENT'
+          value: 'Development'          // Useful for debugging
         }
       ]
     }

@@ -126,6 +126,10 @@ var app = builder.Build();
 
 app.Logger.LogInformation("PublicApi App created...");
 
+builder.Services.AddHealthChecks();
+
+app.MapHealthChecks("/health");
+
 app.Logger.LogInformation("Seeding Database...");
 
 using (var scope = app.Services.CreateScope())
