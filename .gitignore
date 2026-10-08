@@ -260,3 +260,5 @@ pub/
 .devcontainer
 
 .azure
+/.codemie/virtual_assistants
+/.vscode
