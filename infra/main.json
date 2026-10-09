@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "16367674888342787053"
+      "templateHash": "11354564321510451967"
     }
   },
   "parameters": {
@@ -424,7 +424,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.47.16.16243",
-              "templateHash": "7090342887814391271"
+              "templateHash": "10118457316375690980"
             }
           },
           "parameters": {
@@ -504,6 +504,7 @@
               "properties": {
                 "serverFarmId": "[parameters('appServicePlanId')]",
                 "httpsOnly": true,
+                "clientAffinityEnabled": false,
                 "siteConfig": {
                   "netFrameworkVersion": "v8.0",
                   "alwaysOn": true,
@@ -560,7 +561,7 @@
                           "metricResourceUri": "[parameters('appServicePlanId')]",
                           "timeGrain": "PT1M",
                           "statistic": "Average",
-                          "timeWindow": "PT5M",
+                          "timeWindow": "PT2M",
                           "timeAggregation": "Average",
                           "operator": "GreaterThan",
                           "threshold": "[parameters('cpuScaleOut')]"
@@ -569,7 +570,7 @@
                           "direction": "Increase",
                           "type": "ChangeCount",
                           "value": "2",
-                          "cooldown": "PT5M"
+                          "cooldown": "PT3M"
                         }
                       },
                       {
@@ -578,7 +579,7 @@
                           "metricResourceUri": "[parameters('appServicePlanId')]",
                           "timeGrain": "PT1M",
                           "statistic": "Average",
-                          "timeWindow": "PT10M",
+                          "timeWindow": "PT5M",
                           "timeAggregation": "Average",
                           "operator": "LessThan",
                           "threshold": "[parameters('cpuScaleIn')]"
@@ -587,7 +588,7 @@
                           "direction": "Decrease",
                           "type": "ChangeCount",
                           "value": "1",
-                          "cooldown": "PT10M"
+                          "cooldown": "PT5M"
                         }
                       },
                       {
@@ -596,7 +597,7 @@
                           "metricResourceUri": "[parameters('appServicePlanId')]",
                           "timeGrain": "PT1M",
                           "statistic": "Average",
-                          "timeWindow": "PT5M",
+                          "timeWindow": "PT2M",
                           "timeAggregation": "Average",
                           "operator": "GreaterThan",
                           "threshold": 10
@@ -605,7 +606,7 @@
                           "direction": "Increase",
                           "type": "ChangeCount",
                           "value": "1",
-                          "cooldown": "PT5M"
+                          "cooldown": "PT3M"
                         }
                       }
                     ]

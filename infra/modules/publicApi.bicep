@@ -47,6 +47,12 @@ resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
   properties: {
     serverFarmId: appServicePlanId
     httpsOnly: true
+
+    // Without this, App Service pins each client to the instance it first hit
+    // via the ARRAffinity cookie. Scaling out then adds instances that get no
+    // traffic from existing clients, so autoscale buys nothing for the users
+    // already suffering. The Web app (modules/webApp.bicep) already sets this.
+    clientAffinityEnabled: false
     siteConfig: {
       netFrameworkVersion: 'v8.0'
       alwaysOn: true
@@ -89,14 +95,16 @@ resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
 //                CPU: 20% ← below 70%, no action
 //
 // High load:     [Instance 1] CPU: 80% > 70%
-//                ↓ After 5 minutes
-//                [Instance 1][Instance 2] added!
+//                ↓ After ~2 minutes (+ metric ingestion lag)
+//                [Instance 1][Instance 2][Instance 3]  <- +2 at a time
 //
 // Load drops:    CPU: 25% < 30%
-//                ↓ After 10 minutes
-//                [Instance 1] removed!
+//                ↓ After ~5 minutes
+//                [Instance 1][Instance 2]              <- -1 at a time
 //
-// IMPORTANT: Autoscale scales the PLAN (all apps in it)
+// IMPORTANT: Autoscale scales the PLAN (all apps in it). CpuPercentage is
+// averaged across the plan's INSTANCES, and every app in the plan shares each
+// instance's CPU - so a busy API raises the metric even when the Web app idles.
 // ──────────────────────────────────────────────
 
 resource autoscale 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
@@ -126,7 +134,7 @@ resource autoscale 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
               metricResourceUri: appServicePlanId
               timeGrain: 'PT1M'          // Check every 1 minute
               statistic: 'Average'       // Average across instances
-              timeWindow: 'PT5M'         // Over 5 minute window
+              timeWindow: 'PT2M'         // Short: this API saturates in seconds
               timeAggregation: 'Average'
               operator: 'GreaterThan'
               threshold: cpuScaleOut     // Default: 70%
@@ -135,7 +143,7 @@ resource autoscale 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
               direction: 'Increase'
               type: 'ChangeCount'
               value: '2'                 // Add 2 instances at once
-              cooldown: 'PT5M'           // Wait 5min before scaling again
+              cooldown: 'PT3M'           // Enough for the new instances to absorb load
             }
           }
 
@@ -146,7 +154,7 @@ resource autoscale 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
               metricResourceUri: appServicePlanId
               timeGrain: 'PT1M'
               statistic: 'Average'
-              timeWindow: 'PT10M'        // Longer window - be sure before removing
+              timeWindow: 'PT5M'         // 2.5x the scale-out window - be sure before removing
               timeAggregation: 'Average'
               operator: 'LessThan'
               threshold: cpuScaleIn      // Default: 30%
@@ -155,7 +163,7 @@ resource autoscale 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
               direction: 'Decrease'
               type: 'ChangeCount'
               value: '1'                 // Remove 1 at a time (cautious)
-              cooldown: 'PT10M'          // Wait 10min between scale-in
+              cooldown: 'PT5M'           // Slower than scale-out, to avoid thrash
             }
           }
 
@@ -167,7 +175,7 @@ resource autoscale 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
               metricResourceUri: appServicePlanId
               timeGrain: 'PT1M'
               statistic: 'Average'
-              timeWindow: 'PT5M'
+              timeWindow: 'PT2M'
               timeAggregation: 'Average'
               operator: 'GreaterThan'
               threshold: 10              // > 10 requests queued
@@ -176,7 +184,7 @@ resource autoscale 'Microsoft.Insights/autoscalesettings@2022-10-01' = {
               direction: 'Increase'
               type: 'ChangeCount'
               value: '1'
-              cooldown: 'PT5M'
+              cooldown: 'PT3M'
             }
           }
         ]

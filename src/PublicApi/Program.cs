@@ -157,6 +157,22 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<ExceptionMiddleware>();
 
+// Identify which instance served the request, so load tests can observe
+// autoscale behaviour directly instead of inferring it from the ARRAffinity
+// cookie - which no longer exists now that clientAffinityEnabled is false.
+// WEBSITE_INSTANCE_ID is set by App Service; MachineName covers local runs.
+// Only a short prefix is exposed: enough to tell instances apart, without
+// publishing the full infrastructure identifier.
+var instanceId = (Environment.GetEnvironmentVariable("WEBSITE_INSTANCE_ID")
+                  ?? Environment.MachineName
+                  ?? "unknown");
+var shortInstanceId = instanceId.Length > 8 ? instanceId.Substring(0, 8) : instanceId;
+app.Use(async (context, next) =>
+{
+    context.Response.Headers["X-Instance-Id"] = shortInstanceId;
+    await next();
+});
+
 app.UseHttpsRedirection();
 
 app.UseRouting();
