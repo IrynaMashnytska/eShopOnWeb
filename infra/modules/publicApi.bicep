@@ -10,6 +10,10 @@ param appServicePlanName string
 @description('Public base URL the Web front end is served from, used as the CORS origin')
 param webBaseUrl string
 
+@description('Application Insights connection string. Empty disables telemetry: the SDK stays registered but ships nothing.')
+@secure()
+param appInsightsConnectionString string = ''
+
 // ── AUTOSCALE PARAMETERS ──────────────────────
 // These control when scaling happens
 // Good defaults, can be overridden
@@ -39,6 +43,13 @@ var envSuffix = environment == 'prod' ? '' : '-${environment}'
 
 var apiAppName = 'api-${projectName}${envSuffix}-${suffix}'
 
+var appInsightsSettings = empty(appInsightsConnectionString) ? [] : [
+  {
+    name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+    value: appInsightsConnectionString
+  }
+]
+
 resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
   name: apiAppName
   location: location
@@ -64,7 +75,7 @@ resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
         supportCredentials: false
       }
 
-      appSettings: [
+      appSettings: concat([
         {
           name: 'ASPNETCORE_ENVIRONMENT'
           value: 'Production'
@@ -81,7 +92,7 @@ resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'baseUrls__apiBase'
           value: 'https://${apiAppName}.azurewebsites.net/api/'
         }
-      ]
+      ], appInsightsSettings)
     }
   }
 }

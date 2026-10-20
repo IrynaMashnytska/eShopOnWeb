@@ -136,6 +136,20 @@ module planWestEU 'modules/appservice-plan.bicep' = {
 }
 
 
+module monitoring 'modules/monitoring.bicep' = {
+  name: 'deploy-monitoring'
+  scope: rgSharedResource
+  params: {
+    location: locationEastUS
+    projectName: projectName
+    environment: environment
+    tags: {
+      environment: environment
+      component: 'monitoring'
+    }
+  }
+}
+
 // Deployed before the Web apps: they need its hostname for baseUrls__apiBase.
 module publicApi 'modules/publicApi.bicep' = {
   name: 'deploy-api-westeu'
@@ -148,6 +162,7 @@ module publicApi 'modules/publicApi.bicep' = {
     appServicePlanId: planWestEU.outputs.planId
     appServicePlanName: planWestEU.outputs.planName
     webBaseUrl: tmPublicUrl
+    appInsightsConnectionString: monitoring.outputs.connectionString
     minInstances: apiMinInstances
     maxInstances: apiMaxInstances
     cpuScaleOut: apiCpuScaleOut
