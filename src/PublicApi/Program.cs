@@ -51,7 +51,7 @@ var configSection = builder.Configuration.GetRequiredSection(BaseUrlConfiguratio
 builder.Services.Configure<BaseUrlConfiguration>(configSection);
 var baseUrlConfig = configSection.Get<BaseUrlConfiguration>();
 
-throw new Exception("Cannot move further");
+//throw new Exception("Cannot move further");
 
 builder.Services.AddMemoryCache();
 
