@@ -1,23 +1,19 @@
 // infra/main.bicep
-// Dev environment: one resource group holding one App Service plan, the Public API,
-// one Web app with a 'dev' deployment slot, Application Insights, and the OrderItemsReserver
-// Function App with the Storage account that holds the order request blobs.
+// Single environment, single region: one resource group (rg-eshop-prod) holding one App Service plan,
+// the Public API, the Web app, Application Insights, and the OrderItemsReserver Function App
+// with the Storage account that holds the order request blobs.
 
 targetScope = 'subscription'
 
-@allowed(['dev', 'staging', 'prod'])
-param environment string = 'dev'
+@allowed(['prod'])
+param environment string = 'prod'
 
 param projectName string = 'eshop'
 
 param location string = 'westeurope'
 
-@description('S1 is the minimum tier that supports deployment slots')
 @allowed(['S1', 'S2'])
 param appServiceSku string = 'S1'
-
-@description('Name of the Web app deployment slot')
-param webSlotName string = 'dev'
 
 // Short unique suffix: site names are globally unique
 var suffix = toLower(take(uniqueString(subscription().subscriptionId), 6))
@@ -119,7 +115,6 @@ module webApp 'modules/webApp.bicep' = {
   params: {
     location: location
     webAppName: webAppName
-    slotName: webSlotName
     appServicePlanId: plan.outputs.planId
     apiBaseUrl: apiBaseUrl
     orderItemsReserverUrl: orderItemsReserverUrl
@@ -131,7 +126,6 @@ output summary object = {
   resourceGroup: rgName
   publicApi: 'https://${publicApi.outputs.apiHostname}'
   web: 'https://${webApp.outputs.webAppHostname}'
-  webSlot: 'https://${webApp.outputs.slotHostname}'
   appInsights: monitoring.outputs.appInsightsName
   functionApp: 'https://${functionApp.outputs.functionHostname}'
   functionAppName: functionApp.outputs.functionAppName

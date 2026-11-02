@@ -6,19 +6,11 @@ on:
     paths:
       - 'infra/**'          
   workflow_dispatch:         
-    inputs:
-      environment:
-        description: 'Environment to deploy'
-        required: true
-        default: 'prod'
-        type: choice
-        options: [ dev, staging, prod ]
 
 env:
-  LOCATION: eastus
+  LOCATION: westeurope
   PROJECT_NAME: eshop
-  # workflow_dispatch supplies this; a push to master always deploys prod.
-  ENVIRONMENT: ${{ inputs.environment || 'prod' }}
+  ENVIRONMENT: prod
 
 jobs:
   validate:
@@ -97,25 +89,20 @@ jobs:
         echo "| Resource | URL |" >> $GITHUB_STEP_SUMMARY
         echo "|----------|-----|" >> $GITHUB_STEP_SUMMARY
 
-        OUTPUTS='${{ steps.bicep_deploy.outputs.outputs }}'
+        SUMMARY=$(az deployment sub show \
+          --name "${{ steps.bicep_deploy.outputs.deploy_name }}" \
+          --query properties.outputs.summary.value --output json)
+        echo "$SUMMARY" > summary.json
 
-        WEB_EUS=$(echo $OUTPUTS | jq -r '.webEastUS.production')
-        STAGING=$(echo $OUTPUTS | jq -r '.webEastUS.staging')
-        WEB_WEU=$(echo $OUTPUTS | jq -r '.webWestEU.production')
-        API_URL=$(echo $OUTPUTS | jq -r '.publicApi.url')
-        TM_URL=$(echo $OUTPUTS  | jq -r '.trafficManager.url')
-
-        echo "| 🌎 Web East US | $WEB_EUS |" >> $GITHUB_STEP_SUMMARY
-        echo "| 🔵 Staging Slot | $STAGING |" >> $GITHUB_STEP_SUMMARY
-        echo "| 🌍 Web West EU | $WEB_WEU |" >> $GITHUB_STEP_SUMMARY
-        echo "| 🔌 Public API | $API_URL |" >> $GITHUB_STEP_SUMMARY
-        echo "| 🚦 Traffic Mgr | $TM_URL |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🌐 Web | $(jq -r '.web' summary.json) |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🔌 Public API | $(jq -r '.publicApi' summary.json) |" >> $GITHUB_STEP_SUMMARY
+        echo "| ⚡ Function (OrderItemsReserver) | $(jq -r '.functionApp' summary.json) |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🗄️ Storage account | $(jq -r '.storageAccount' summary.json) / $(jq -r '.ordersContainer' summary.json) |" >> $GITHUB_STEP_SUMMARY
 
     - name: 💾 Save URLs as Artifact
       run: |
         mkdir -p deployment-info
-        echo '${{ steps.bicep_deploy.outputs.outputs }}' \
-          > deployment-info/urls.json
+        mv summary.json deployment-info/urls.json
         cat deployment-info/urls.json
 
     - uses: actions/upload-artifact@v4

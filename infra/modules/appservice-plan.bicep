@@ -4,7 +4,7 @@ param location string
 param projectName string
 param environment string
 
-@description('App Service SKU - S1 minimum for deployment slots')
+@description('App Service SKU')
 @allowed(['S1', 'S2', 'S3'])
 param sku string = 'S1'
 

@@ -8,10 +8,7 @@ targetScope = 'resourceGroup'
 // component points at it. Both telemetry and logs therefore land in one
 // workspace and are queryable with KQL from either blade.
 //
-// Lives in the shared resource group so the Web apps in both regions can report
-// into the same component later. Cross-region ingestion (component in East US,
-// API in West Europe) is supported and adds only ingest latency, not a hard
-// dependency on the region staying up.
+// Lives in the same resource group and region as the apps that report into it.
 // ──────────────────────────────────────────────
 
 param location string
