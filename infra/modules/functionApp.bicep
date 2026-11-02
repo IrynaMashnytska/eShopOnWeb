@@ -20,9 +20,6 @@ param appInsightsConnectionString string = ''
 
 param tags object = {}
 
-// Storage Blob Data Contributor
-var blobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-
 resource storage 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
   name: storageAccountName
 }
@@ -66,27 +63,14 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'AzureWebJobsStorage'
           value: storageConnectionString
         }
-        // The function writes with its managed identity, so no key is needed in code
-        {
-          name: 'OrderStorage__BlobServiceUri'
-          value: storage.properties.primaryEndpoints.blob
-        }
+        // Blobs are written with the AzureWebJobsStorage connection string. A managed-identity role assignment
+        // is avoided because the deployment principal has no Microsoft.Authorization/roleAssignments/write.
         {
           name: 'OrderStorage__ContainerName'
           value: ordersContainerName
         }
       ], appInsightsSettings)
     }
-  }
-}
-
-resource blobWriterRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: storage
-  name: guid(storage.id, functionApp.id, blobDataContributorRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', blobDataContributorRoleId)
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
   }
 }
 
