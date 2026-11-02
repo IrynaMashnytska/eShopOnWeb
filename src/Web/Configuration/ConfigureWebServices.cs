@@ -16,6 +16,9 @@ public static class ConfigureWebServices
         services.Configure<CatalogSettings>(configuration);
         services.AddScoped<ICatalogViewModelService, CachedCatalogViewModelService>();
 
+        services.AddHttpClient<IOrderItemsReserverClient, OrderItemsReserverClient>(client =>
+            client.Timeout = TimeSpan.FromSeconds(10));
+
         return services;
     }
 }

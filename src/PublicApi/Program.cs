@@ -25,13 +25,14 @@ using MinimalApi.Endpoint.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddApplicationInsightsTelemetry();
+
 builder.Services.AddEndpoints();
 
 // Use to force loading of appsettings.json of test project
 builder.Configuration.AddConfigurationFile("appsettings.test.json");
 builder.Logging.AddConsole();
 
-builder.Services.AddApplicationInsightsTelemetry();
 
 Microsoft.eShopWeb.Infrastructure.Dependencies.ConfigureServices(builder.Configuration, builder.Services);
 
@@ -50,8 +51,6 @@ builder.Services.AddScoped<ITokenClaimsService, IdentityTokenClaimService>();
 var configSection = builder.Configuration.GetRequiredSection(BaseUrlConfiguration.CONFIG_NAME);
 builder.Services.Configure<BaseUrlConfiguration>(configSection);
 var baseUrlConfig = configSection.Get<BaseUrlConfiguration>();
-
-//throw new Exception("Cannot move further");
 
 builder.Services.AddMemoryCache();
 
@@ -127,6 +126,7 @@ builder.Services.AddSwaggerGen(c =>
             });
 });
 
+
 var app = builder.Build();
 
 app.Logger.LogInformation("PublicApi App created...");
@@ -159,7 +159,7 @@ if (app.Environment.IsDevelopment())
     app.UseDeveloperExceptionPage();
 }
 
-app.UseMiddleware<ExceptionMiddleware>();
+//app.UseMiddleware<ExceptionMiddleware>();
 
 // Identify which instance served the request, so load tests can observe
 // autoscale behaviour directly instead of inferring it from the ARRAffinity
