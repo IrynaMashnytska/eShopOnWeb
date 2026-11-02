@@ -1,10 +1,10 @@
 targetScope = 'resourceGroup'
 
 param location string
-param projectName string
-param environment string
-param regionShort string
-param suffix string
+param webAppName string
+
+@description('Name of the deployment slot')
+param slotName string = 'dev'
 
 @description('ID of the App Service Plan to use')
 param appServicePlanId string
@@ -12,46 +12,38 @@ param appServicePlanId string
 @description('Absolute base URL of the Public API, including trailing slash')
 param apiBaseUrl string
 
-param enableDeploymentSlot bool = false
+@description('Full URL of the OrderItemsReserver HTTP function the Web app calls after an order is created')
+param orderItemsReserverUrl string
 
 param tags object = {}
 
-// Keeps prod names unchanged while separating dev/staging deployments in the same subscription
-// (site names are globally unique, and `suffix` is subscription-wide).
-var envSuffix = environment == 'prod' ? '' : '-${environment}'
-
-var webAppName = 'web-${projectName}-${regionShort}${envSuffix}-${suffix}'
-
 // Self-referential, so derived from the name rather than the resource to avoid a cycle
-var webBaseUrl    = 'https://${webAppName}.azurewebsites.net/'
-var slotBaseUrl   = 'https://${webAppName}-staging.azurewebsites.net/'
+var webBaseUrl  = 'https://${webAppName}.azurewebsites.net/'
+var slotBaseUrl = 'https://${webAppName}-${slotName}.azurewebsites.net/'
 
 resource webApp 'Microsoft.Web/sites@2022-09-01' = {
   name: webAppName
   location: location
   tags: tags
-
   identity: {
     type: 'SystemAssigned'
   }
-
   properties: {
-    serverFarmId: appServicePlanId  // Which plan to use
-    httpsOnly: true                 // Force HTTPS
-    clientAffinityEnabled: false    // Better for multi-region
+    serverFarmId: appServicePlanId
+    httpsOnly: true
+    clientAffinityEnabled: false
 
     siteConfig: {
-      netFrameworkVersion: 'v8.0'   // .NET 8
-      alwaysOn: true                // Never sleep (needs S1+)
-      ftpsState: 'FtpsOnly'         // Secure FTP only
-      minTlsVersion: '1.2'          // Security: no old TLS
-      http20Enabled: true           // Use HTTP/2
+      netFrameworkVersion: 'v8.0'
+      alwaysOn: true
+      ftpsState: 'FtpsOnly'
+      minTlsVersion: '1.2'
+      http20Enabled: true
 
       // Set here rather than via a child 'web' config resource: that resource issues a full PUT of
       // the web config and would reset the siteConfig values above to their defaults.
       healthCheckPath: '/liveness'
 
-      // ── APP SETTINGS ────────────────────────
       appSettings: [
         {
           name: 'ASPNETCORE_ENVIRONMENT'
@@ -63,7 +55,7 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'REGION'
-          value: location          // Useful for debugging
+          value: location
         }
         {
           name: 'baseUrls__apiBase'
@@ -73,16 +65,20 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'baseUrls__webBase'
           value: webBaseUrl
         }
+        {
+          name: 'OrderItemsReserver__Url'
+          value: orderItemsReserverUrl
+        }
       ]
     }
   }
 }
 
-resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeploymentSlot) {
+resource devSlot 'Microsoft.Web/sites/slots@2022-09-01' = {
   parent: webApp
-  name: 'staging'
+  name: slotName
   location: location
-  tags: union(tags, { slot: 'staging' })
+  tags: union(tags, { slot: slotName })
   identity: {
     type: 'SystemAssigned'
   }
@@ -96,7 +92,7 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeployme
       appSettings: [
         {
           name: 'ASPNETCORE_ENVIRONMENT'
-          value: 'Staging'
+          value: 'Development'
         }
         {
           name: 'UseOnlyInMemoryDatabase'
@@ -104,7 +100,7 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeployme
         }
         {
           name: 'SLOT_NAME'
-          value: 'staging'
+          value: slotName
         }
         {
           name: 'baseUrls__apiBase'
@@ -114,14 +110,18 @@ resource stagingSlot 'Microsoft.Web/sites/slots@2022-09-01' = if (enableDeployme
           name: 'baseUrls__webBase'
           value: slotBaseUrl
         }
+        {
+          name: 'OrderItemsReserver__Url'
+          value: orderItemsReserverUrl
+        }
       ]
     }
   }
 }
 
-// Sticky settings: these stay with the slot across a swap, so the slot keeps Staging/staging and
-// its own webBase instead of carrying them into production.
-resource slotConfig 'Microsoft.Web/sites/config@2022-09-01' = if (enableDeploymentSlot) {
+// Sticky settings: these stay with the slot across a swap, so the slot keeps its own environment
+// name and webBase instead of carrying them into production.
+resource slotConfig 'Microsoft.Web/sites/config@2022-09-01' = {
   parent: webApp
   name: 'slotConfigNames'
   properties: {
@@ -133,15 +133,7 @@ resource slotConfig 'Microsoft.Web/sites/config@2022-09-01' = if (enableDeployme
   }
 }
 
-// ──────────────────────────────────────────────
-// OUTPUTS
-// ──────────────────────────────────────────────
-
-output webAppId string       = webApp.id
-output webAppName string     = webApp.name
-output webAppHostname string = webApp.properties.defaultHostName
-
-// Ternary operator: if slot enabled return hostname, else empty string
-output stagingHostname string = enableDeploymentSlot
-  ? stagingSlot.properties.defaultHostName
-  : ''
+output webAppId string        = webApp.id
+output webAppName string      = webApp.name
+output webAppHostname string  = webApp.properties.defaultHostName
+output slotHostname string    = devSlot.properties.defaultHostName
