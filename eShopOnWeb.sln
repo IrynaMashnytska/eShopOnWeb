@@ -41,7 +41,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlazorShared", "src\BlazorS
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PublicApiIntegrationTests", "tests\PublicApiIntegrationTests\PublicApiIntegrationTests.csproj", "{D53EF010-8F8C-4337-A059-456E19D8AE63}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderItemsReserver", "..\OrderItemsReserver\OrderItemsReserver.csproj", "{96ACF3A2-46EC-432A-9889-74709906FFB2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OrderItemsReserver", "Azure.Functions.Worker\OrderItemsReserver.csproj", "{96ACF3A2-46EC-432A-9889-74709906FFB2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
