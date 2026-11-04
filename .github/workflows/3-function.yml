@@ -37,6 +37,7 @@ jobs:
       with:
         name: function-build-${{ github.sha }}
         path: ./publish
+        include-hidden-files: true   # keeps .azurefunctions/ (extension binaries the Functions host needs)
         retention-days: 1
 
   deploy:
