@@ -89,7 +89,7 @@ jobs:
 
         for i in {1..5}; do
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 15 "$URL")
+            --max-time 15 "$URL" || true)
 
           if [[ "$STATUS" == "200" ]]; then
             echo "✅ API healthy: $URL"

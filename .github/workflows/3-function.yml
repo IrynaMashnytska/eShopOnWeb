@@ -82,12 +82,13 @@ jobs:
       run: |
         URL="${{ steps.get_app.outputs.func_url }}"
 
-        sleep 20
+        sleep 30
 
-        for i in {1..6}; do
+        for i in {1..10}; do
+          # `|| true`: the step runs with `bash -e`, and a curl timeout (exit 28) must be retried, not abort the step
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 20 -X POST \
-            -H "Content-Type: application/json" -d '{}' "$URL")
+            --max-time 30 -X POST \
+            -H "Content-Type: application/json" -d '{}' "$URL" || true)
 
           if [[ "$STATUS" == "400" ]]; then
             echo "✅ Function is live: $URL"
