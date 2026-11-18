@@ -1,9 +1,6 @@
 using System.Text.Json;
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using OrderItemsReserver.Models;
 
@@ -13,18 +10,16 @@ public class OrderItemsReserverFunction
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
-    private readonly BlobContainerClient _container;
     private readonly ILogger<OrderItemsReserverFunction> _logger;
 
-    public OrderItemsReserverFunction(BlobContainerClient container, ILogger<OrderItemsReserverFunction> logger)
+    public OrderItemsReserverFunction(ILogger<OrderItemsReserverFunction> logger)
     {
-        _container = container;
         _logger = logger;
     }
 
     [Function("OrderItemsReserver")]
-    public async Task<IActionResult> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequest req,
+    public async Task<OrderItemsReserverOutput> Run(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequestData req,
         CancellationToken cancellationToken)
     {
         OrderRequest? order;
@@ -35,25 +30,31 @@ public class OrderItemsReserverFunction
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Rejected order request: malformed JSON");
-            return new BadRequestObjectResult("Request body is not valid JSON.");
+            return await RejectAsync(req, "Request body is not valid JSON.", cancellationToken);
         }
 
         if (order is null || order.OrderId <= 0 || order.Items.Count == 0
             || order.Items.Any(i => i.ItemId <= 0 || i.Quantity <= 0))
         {
-            return new BadRequestObjectResult("Order must have a positive orderId and at least one item with positive itemId and quantity.");
+            return await RejectAsync(req, "Order must have a positive orderId and at least one item with positive itemId and quantity.", cancellationToken);
         }
 
-        var blobName = $"order-{order.OrderId}.json";
-        var content = BinaryData.FromBytes(JsonSerializer.SerializeToUtf8Bytes(order, JsonOptions));
+        _logger.LogInformation("Accepted order request {OrderId} with {ItemCount} item(s)", order.OrderId, order.Items.Count);
 
-        await _container.CreateIfNotExistsAsync(cancellationToken: cancellationToken);
-        await _container.GetBlobClient(blobName).UploadAsync(
-            content,
-            new BlobUploadOptions { HttpHeaders = new BlobHttpHeaders { ContentType = "application/json" } },
-            cancellationToken);
+        var response = req.CreateResponse(System.Net.HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(new { blob = $"order-{order.OrderId}.json" }, cancellationToken);
 
-        _logger.LogInformation("Uploaded order request {BlobName} with {ItemCount} item(s)", blobName, order.Items.Count);
-        return new OkObjectResult(new { blob = blobName });
+        return new OrderItemsReserverOutput
+        {
+            Blob = JsonSerializer.Serialize(order, JsonOptions),
+            Response = response,
+        };
+    }
+
+    private static async Task<OrderItemsReserverOutput> RejectAsync(HttpRequestData req, string message, CancellationToken cancellationToken)
+    {
+        var response = req.CreateResponse(System.Net.HttpStatusCode.BadRequest);
+        await response.WriteStringAsync(message, cancellationToken);
+        return new OrderItemsReserverOutput { Response = response };
     }
 }

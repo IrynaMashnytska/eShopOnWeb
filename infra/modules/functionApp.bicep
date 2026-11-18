@@ -63,10 +63,11 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'AzureWebJobsStorage'
           value: storageConnectionString
         }
-        // Blobs are written with the AzureWebJobsStorage connection string. A managed-identity role assignment
-        // is avoided because the deployment principal has no Microsoft.Authorization/roleAssignments/write.
+        // The [BlobOutput] binding writes with the AzureWebJobsStorage connection string. A managed-identity role
+        // assignment is avoided because the deployment principal has no Microsoft.Authorization/roleAssignments/write.
+        // Read by the binding as %OrderContainerName%; the name has no '__' because the host does not resolve those in %...% tokens.
         {
-          name: 'OrderStorage__ContainerName'
+          name: 'OrderContainerName'
           value: ordersContainerName
         }
       ], appInsightsSettings)

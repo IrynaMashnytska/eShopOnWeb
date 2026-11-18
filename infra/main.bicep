@@ -16,6 +16,15 @@ param location string = 'westeurope'
 @allowed(['S1', 'S2'])
 param appServiceSku string = 'S1'
 
+// The data services have their own regions because this subscription cannot provision SQL in westeurope
+// ("ProvisioningDisabled") and Cosmos DB reported no capacity there. Check a region for SQL with:
+//   az rest --method get --url ".../providers/Microsoft.Sql/locations/<region>/capabilities?api-version=2021-11-01"
+@description('Region for the Azure SQL server and databases')
+param sqlLocation string = 'germanywestcentral'
+
+@description('Region for the Cosmos DB account')
+param cosmosLocation string = 'germanywestcentral'
+
 @description('Azure SQL administrator login')
 param sqlAdminLogin string = 'eshopadmin'
 
@@ -35,8 +44,10 @@ var storageName = take('st${projectName}${environment}${suffix}', 24)
 
 // Prefix 'func-delivery' (not 'func-eshop') so the deploy workflows can tell the two function apps apart by name
 var deliveryFuncAppName = 'func-delivery-${projectName}-${environment}-${suffix}'
-var sqlServerName       = 'sql-${projectName}-${environment}-${suffix}'
-var cosmosAccountName   = 'cosmos-${projectName}-${environment}-${suffix}'
+// The region is part of the name: a resource name cannot be reused in another region, so changing the
+// region after a failed or unwanted deployment gets a fresh name instead of a conflict. (Cosmos names max 44 chars.)
+var sqlServerName       = 'sql-${projectName}-${environment}-${suffix}-${sqlLocation}'
+var cosmosAccountName   = 'cosmos-${projectName}-${environment}-${suffix}-${cosmosLocation}'
 
 var catalogDbName  = 'CatalogDb'
 var identityDbName = 'IdentityDb'
@@ -97,7 +108,7 @@ module sql 'modules/sql.bicep' = {
   name: 'deploy-sql'
   scope: rg
   params: {
-    location: location
+    location: sqlLocation
     sqlServerName: sqlServerName
     sqlAdminLogin: sqlAdminLogin
     sqlAdminPassword: sqlAdminPassword
@@ -154,7 +165,7 @@ module cosmos 'modules/cosmos.bicep' = {
   name: 'deploy-cosmos'
   scope: rg
   params: {
-    location: location
+    location: cosmosLocation
     cosmosAccountName: cosmosAccountName
     databaseName: cosmosDatabaseName
     containerName: cosmosContainerName

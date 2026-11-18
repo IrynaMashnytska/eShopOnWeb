@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "10235664284297425431"
+      "templateHash": "1415096964486353839"
     }
   },
   "parameters": {
@@ -32,6 +32,20 @@
         "S2"
       ]
     },
+    "sqlLocation": {
+      "type": "string",
+      "defaultValue": "germanywestcentral",
+      "metadata": {
+        "description": "Region for the Azure SQL server and databases"
+      }
+    },
+    "cosmosLocation": {
+      "type": "string",
+      "defaultValue": "germanywestcentral",
+      "metadata": {
+        "description": "Region for the Cosmos DB account"
+      }
+    },
     "sqlAdminLogin": {
       "type": "string",
       "defaultValue": "eshopadmin",
@@ -54,8 +68,8 @@
     "funcAppName": "[format('func-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
     "storageName": "[take(format('st{0}{1}{2}', parameters('projectName'), parameters('environment'), variables('suffix')), 24)]",
     "deliveryFuncAppName": "[format('func-delivery-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
-    "sqlServerName": "[format('sql-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
-    "cosmosAccountName": "[format('cosmos-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
+    "sqlServerName": "[format('sql-{0}-{1}-{2}-{3}', parameters('projectName'), parameters('environment'), variables('suffix'), parameters('sqlLocation'))]",
+    "cosmosAccountName": "[format('cosmos-{0}-{1}-{2}-{3}', parameters('projectName'), parameters('environment'), variables('suffix'), parameters('cosmosLocation'))]",
     "catalogDbName": "CatalogDb",
     "identityDbName": "IdentityDb",
     "cosmosDatabaseName": "delivery",
@@ -336,7 +350,7 @@
         "mode": "Incremental",
         "parameters": {
           "location": {
-            "value": "[parameters('location')]"
+            "value": "[parameters('sqlLocation')]"
           },
           "sqlServerName": {
             "value": "[variables('sqlServerName')]"
@@ -807,7 +821,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.47.16.16243",
-              "templateHash": "9370940372411936514"
+              "templateHash": "6137593814801590580"
             }
           },
           "parameters": {
@@ -867,7 +881,7 @@
                   "ftpsState": "Disabled",
                   "minTlsVersion": "1.2",
                   "http20Enabled": true,
-                  "appSettings": "[concat(createArray(createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'dotnet-isolated'), createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'OrderStorage__ContainerName', 'value', parameters('ordersContainerName'))), variables('appInsightsSettings'))]"
+                  "appSettings": "[concat(createArray(createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'dotnet-isolated'), createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'OrderContainerName', 'value', parameters('ordersContainerName'))), variables('appInsightsSettings'))]"
                 }
               }
             }
@@ -907,7 +921,7 @@
         "mode": "Incremental",
         "parameters": {
           "location": {
-            "value": "[parameters('location')]"
+            "value": "[parameters('cosmosLocation')]"
           },
           "cosmosAccountName": {
             "value": "[variables('cosmosAccountName')]"
