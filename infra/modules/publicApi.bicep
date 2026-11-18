@@ -11,7 +11,17 @@ param webBaseUrl string
 @secure()
 param appInsightsConnectionString string = ''
 
+param sqlServerFqdn string
+param catalogDbName string
+param identityDbName string
+param sqlAdminLogin string
+
+@secure()
+param sqlAdminPassword string
+
 param tags object = {}
+
+var sqlConnectionTemplate = 'Server=tcp:${sqlServerFqdn},1433;User ID=${sqlAdminLogin};Password=${sqlAdminPassword};Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
 
 var appInsightsSettings = empty(appInsightsConnectionString) ? [] : [
   {
@@ -42,7 +52,11 @@ resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'UseOnlyInMemoryDatabase'
-          value: 'true'           // No database is deployed: EF Core uses in-memory stores
+          value: 'false'          // Use the Azure SQL databases from the connection strings below
+        }
+        {
+          name: 'SeedDatabase'
+          value: 'false'          // The Web app owns migrations and seeding; two apps migrating at once would race
         }
         {
           name: 'baseUrls__webBase'
@@ -53,6 +67,19 @@ resource apiApp 'Microsoft.Web/sites@2022-09-01' = {
           value: 'https://${apiAppName}.azurewebsites.net/api/'
         }
       ], appInsightsSettings)
+
+      connectionStrings: [
+        {
+          name: 'CatalogConnection'
+          type: 'SQLAzure'
+          connectionString: '${sqlConnectionTemplate}Initial Catalog=${catalogDbName};'
+        }
+        {
+          name: 'IdentityConnection'
+          type: 'SQLAzure'
+          connectionString: '${sqlConnectionTemplate}Initial Catalog=${identityDbName};'
+        }
+      ]
     }
   }
 }

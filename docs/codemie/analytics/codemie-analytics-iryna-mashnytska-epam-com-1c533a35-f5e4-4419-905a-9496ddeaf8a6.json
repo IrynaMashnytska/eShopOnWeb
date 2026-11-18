@@ -1,0 +1,189 @@
+{
+  "meta": {
+    "generatedAt": "2026-10-20T15:46:34.627Z",
+    "rangeLabel": "all",
+    "agents": [
+      "claude"
+    ],
+    "projectFilter": "all",
+    "totals": {
+      "sessions": 1,
+      "durationMs": 90414242,
+      "turns": 6,
+      "files": 0,
+      "netLines": 0,
+      "toolCallsTotal": 3,
+      "toolSuccessRate": 100,
+      "totalCostUSD": 0.1647726,
+      "cacheReadCostUSD": 0.0379106,
+      "pricedSessions": 1
+    },
+    "unpricedModels": [],
+    "estimatedModels": [],
+    "localModels": [],
+    "coverage": [
+      {
+        "agentName": "claude",
+        "total": 1,
+        "priced": 1,
+        "withLog": 1
+      }
+    ],
+    "userEmail": "iryna_mashnytska@epam.com",
+    "periodStart": "2026-10-19T14:39:37.590Z",
+    "periodEnd": "2026-10-20T15:46:31.832Z"
+  },
+  "sessions": [
+    {
+      "sessionId": "1c533a35-f5e4-4419-905a-9496ddeaf8a6",
+      "agentName": "claude",
+      "provider": "ai-run-sso",
+      "title": "check if it is done Clone and deploy the eShopOnWeb Public API project to the Azure App Service Add Application Insights to Public API project Inject logger in CatalogItemListPagedEndpoint class and add logging of the number items that were returned from the database.",
+      "project": "C:\\Users\\IrynaMashnytska\\source\\repos\\eShopOnWeb-main",
+      "branch": "master",
+      "startTime": 1792420777590,
+      "durationMs": 90414242,
+      "turns": 6,
+      "fileOps": 0,
+      "linesAdded": 0,
+      "linesRemoved": 0,
+      "linesModified": 0,
+      "netLines": 0,
+      "filesChanged": 0,
+      "filesWritten": 0,
+      "filesEdited": 0,
+      "toolCallsTotal": 3,
+      "toolCallsSuccess": 3,
+      "toolCallsFailure": 0,
+      "models": [
+        "claude-sonnet-5-5",
+        "<synthetic>"
+      ],
+      "languages": [],
+      "tools": [
+        {
+          "toolName": "Bash",
+          "totalCalls": 3,
+          "successCount": 3,
+          "failureCount": 0,
+          "successRate": 100
+        }
+      ],
+      "tokens": {
+        "input": 8,
+        "output": 1695,
+        "cacheRead": 189553,
+        "cacheCreation": 27474,
+        "cacheCreation1h": 27474,
+        "total": 218730
+      },
+      "costUSD": 0.1647726,
+      "cacheReadCostUSD": 0.0379106,
+      "perModelCost": [
+        {
+          "model": "claude-sonnet-5-5",
+          "tokens": {
+            "input": 4,
+            "output": 517,
+            "cacheRead": 79967,
+            "cacheCreation": 21972,
+            "cacheCreation1h": 21972,
+            "total": 102460
+          },
+          "costUSD": 0.1090594,
+          "unpriced": false
+        },
+        {
+          "model": "claude-sonnet-5-5",
+          "tokens": {
+            "input": 4,
+            "output": 1178,
+            "cacheRead": 109586,
+            "cacheCreation": 5502,
+            "cacheCreation1h": 5502,
+            "total": 116270
+          },
+          "costUSD": 0.055713200000000004,
+          "unpriced": false
+        }
+      ],
+      "hadLog": true,
+      "agentSessionFile": "C:\\Users\\IrynaMashnytska\\.claude\\projects\\C--Users-IrynaMashnytska-source-repos-eShopOnWeb-main\\4292331e-184f-4ebc-8c80-3e438f628cdc.jsonl",
+      "costSeries": [
+        {
+          "t": 1792421166450,
+          "cost": 0.07440959999999999,
+          "tokens": 48458
+        },
+        {
+          "t": 1792421174474,
+          "cost": 0.1090594,
+          "tokens": 102460
+        },
+        {
+          "t": 1792421183719,
+          "cost": 0.1309534,
+          "tokens": 158604
+        },
+        {
+          "t": 1792421193893,
+          "cost": 0.1647726,
+          "tokens": 218730
+        }
+      ],
+      "costSource": "native-estimate",
+      "costBasis": "standard-api-tokens",
+      "dispatchesComplete": true,
+      "rootOwnCostUSD": 0.1647726,
+      "unlinkedCostUSD": 0,
+      "unlinkedAgentIds": [],
+      "rootOwnTokens": {
+        "input": 8,
+        "output": 1695,
+        "cacheRead": 189553,
+        "cacheCreation": 27474,
+        "cacheCreation1h": 27474,
+        "total": 218730
+      },
+      "unlinkedTokens": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheCreation": 0,
+        "cacheCreation1h": 0,
+        "total": 0
+      },
+      "modelTimeline": [
+        {
+          "t": 1792421166450,
+          "model": "claude-sonnet-5-5",
+          "costUSD": 0.0744096,
+          "tokens": 48458
+        },
+        {
+          "t": 1792421174474,
+          "model": "claude-sonnet-5-5",
+          "costUSD": 0.0346498,
+          "tokens": 54002
+        },
+        {
+          "t": 1792421183719,
+          "model": "claude-sonnet-5-5",
+          "costUSD": 0.021894,
+          "tokens": 56144
+        },
+        {
+          "t": 1792421193893,
+          "model": "claude-sonnet-5-5",
+          "costUSD": 0.0338192,
+          "tokens": 60126
+        }
+      ],
+      "routedTurnsPct": 0,
+      "skillInvocations": [],
+      "agentInvocations": [],
+      "commandInvocations": [],
+      "sessionSource": "Pure chat"
+    }
+  ]
+}

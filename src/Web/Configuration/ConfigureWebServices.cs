@@ -19,6 +19,9 @@ public static class ConfigureWebServices
         services.AddHttpClient<IOrderItemsReserverClient, OrderItemsReserverClient>(client =>
             client.Timeout = TimeSpan.FromSeconds(10));
 
+        services.AddHttpClient<IDeliveryOrderProcessorClient, DeliveryOrderProcessorClient>(client =>
+            client.Timeout = TimeSpan.FromSeconds(10));
+
         return services;
     }
 }

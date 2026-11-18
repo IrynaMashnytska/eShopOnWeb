@@ -13,7 +13,7 @@ env:
   DOTNET_VERSION: '8.0.x'
   PROJECT_PATH: 'src/Web/Web.csproj'
   TEST_PATH: 'tests/UnitTests/UnitTests.csproj'
-  RESOURCE_GROUP: rg-eshop-prod
+  RESOURCE_GROUP: rg-eshop-dev
 
 jobs:
   build:
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     environment:
-      name: production
+      name: dev
       url: ${{ steps.get_app.outputs.web_url }}
 
     steps:

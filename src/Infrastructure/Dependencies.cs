@@ -26,15 +26,16 @@ public static class Dependencies
         }
         else
         {
-            // use real database
-            // Requires LocalDB which can be installed with SQL Server Express 2016
-            // https://www.microsoft.com/en-us/download/details.aspx?id=54284
+            // use real database: LocalDB locally, Azure SQL when deployed (connection strings come from configuration).
+            // Retries ride out the transient failures Azure SQL is expected to produce.
             services.AddDbContext<CatalogContext>(c =>
-                c.UseSqlServer(configuration.GetConnectionString("CatalogConnection")));
+                c.UseSqlServer(configuration.GetConnectionString("CatalogConnection"),
+                    sqlOptions => sqlOptions.EnableRetryOnFailure()));
 
             // Add Identity DbContext
             services.AddDbContext<AppIdentityDbContext>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("IdentityConnection")));
+                options.UseSqlServer(configuration.GetConnectionString("IdentityConnection"),
+                    sqlOptions => sqlOptions.EnableRetryOnFailure()));
         }
     }
 }

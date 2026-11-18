@@ -22,16 +22,17 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddConsole();
 
-// Keyed off UseOnlyInMemoryDatabase rather than the environment name: the Azure deployment runs
-// Production with no database, and must not fall through to the Key Vault / Azure SQL path below.
+// The Key Vault path below is only for azd-style deployments that provide a vault. Azure deployments that
+// pass connection strings directly (App Service connection strings) use the standard path, in Production too.
 var useOnlyInMemoryDatabase = builder.Configuration.GetValue<bool>("UseOnlyInMemoryDatabase");
+var useKeyVault = !string.IsNullOrEmpty(builder.Configuration["AZURE_KEY_VAULT_ENDPOINT"]);
 
-if (useOnlyInMemoryDatabase || builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Docker"){
-    // Configure in-memory stores, or SQL Server (local) when UseOnlyInMemoryDatabase is false
+if (!useKeyVault || useOnlyInMemoryDatabase || builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Docker"){
+    // Configure in-memory stores, or SQL Server (LocalDB / Azure SQL) when UseOnlyInMemoryDatabase is false
     Microsoft.eShopWeb.Infrastructure.Dependencies.ConfigureServices(builder.Configuration, builder.Services);
 }
 else{
-    // Configure SQL Server (prod)
+    // Configure SQL Server (prod) from Key Vault
     var credential = new ChainedTokenCredential(new AzureDeveloperCliCredential(), new DefaultAzureCredential());
     builder.Configuration.AddAzureKeyVault(new Uri(builder.Configuration["AZURE_KEY_VAULT_ENDPOINT"] ?? ""), credential);
     builder.Services.AddDbContext<CatalogContext>(c =>

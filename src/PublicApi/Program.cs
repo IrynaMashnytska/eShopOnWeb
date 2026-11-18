@@ -133,10 +133,14 @@ app.Logger.LogInformation("PublicApi App created...");
 
 app.MapHealthChecks("/health");
 
-app.Logger.LogInformation("Seeding Database...");
+// Set SeedDatabase=false where another app (the Web app) already migrates and seeds the shared database
+var seedDatabase = builder.Configuration.GetValue("SeedDatabase", true);
 
-using (var scope = app.Services.CreateScope())
+if (seedDatabase)
 {
+    app.Logger.LogInformation("Seeding Database...");
+
+    using var scope = app.Services.CreateScope();
     var scopedProvider = scope.ServiceProvider;
     try
     {
@@ -152,6 +156,10 @@ using (var scope = app.Services.CreateScope())
     {
         app.Logger.LogError(ex, "An error occurred seeding the DB.");
     }
+}
+else
+{
+    app.Logger.LogInformation("SeedDatabase is false; skipping migrations and seeding.");
 }
 
 if (app.Environment.IsDevelopment())

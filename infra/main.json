@@ -5,15 +5,15 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "2142898124927736981"
+      "templateHash": "10235664284297425431"
     }
   },
   "parameters": {
     "environment": {
       "type": "string",
-      "defaultValue": "prod",
+      "defaultValue": "dev",
       "allowedValues": [
-        "prod"
+        "dev"
       ]
     },
     "projectName": {
@@ -31,6 +31,19 @@
         "S1",
         "S2"
       ]
+    },
+    "sqlAdminLogin": {
+      "type": "string",
+      "defaultValue": "eshopadmin",
+      "metadata": {
+        "description": "Azure SQL administrator login"
+      }
+    },
+    "sqlAdminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Azure SQL administrator password (8-128 chars, 3 of: upper, lower, digit, symbol). Avoid ; and quotes: it is embedded in connection strings."
+      }
     }
   },
   "variables": {
@@ -40,10 +53,18 @@
     "webAppName": "[format('web-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
     "funcAppName": "[format('func-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
     "storageName": "[take(format('st{0}{1}{2}', parameters('projectName'), parameters('environment'), variables('suffix')), 24)]",
+    "deliveryFuncAppName": "[format('func-delivery-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
+    "sqlServerName": "[format('sql-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
+    "cosmosAccountName": "[format('cosmos-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
+    "catalogDbName": "CatalogDb",
+    "identityDbName": "IdentityDb",
+    "cosmosDatabaseName": "delivery",
+    "cosmosContainerName": "orders",
     "ordersContainerName": "order-requests",
     "apiBaseUrl": "[format('https://{0}.azurewebsites.net/api/', variables('apiAppName'))]",
     "webBaseUrl": "[format('https://{0}.azurewebsites.net/', variables('webAppName'))]",
     "orderItemsReserverUrl": "[format('https://{0}.azurewebsites.net/api/OrderItemsReserver', variables('funcAppName'))]",
+    "deliveryOrderProcessorUrl": "[format('https://{0}.azurewebsites.net/api/DeliveryOrderProcessor', variables('deliveryFuncAppName'))]",
     "tags": {
       "environment": "[parameters('environment')]",
       "project": "[parameters('projectName')]",
@@ -306,6 +327,164 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
+      "name": "deploy-sql",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "sqlServerName": {
+            "value": "[variables('sqlServerName')]"
+          },
+          "sqlAdminLogin": {
+            "value": "[parameters('sqlAdminLogin')]"
+          },
+          "sqlAdminPassword": {
+            "value": "[parameters('sqlAdminPassword')]"
+          },
+          "catalogDbName": {
+            "value": "[variables('catalogDbName')]"
+          },
+          "identityDbName": {
+            "value": "[variables('identityDbName')]"
+          },
+          "tags": {
+            "value": "[union(variables('tags'), createObject('component', 'sql'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "18205976686457629205"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "sqlServerName": {
+              "type": "string"
+            },
+            "sqlAdminLogin": {
+              "type": "string",
+              "metadata": {
+                "description": "SQL administrator login. Reserved names such as admin, sa and root are rejected by Azure."
+              }
+            },
+            "sqlAdminPassword": {
+              "type": "securestring"
+            },
+            "catalogDbName": {
+              "type": "string"
+            },
+            "identityDbName": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Sql/servers",
+              "apiVersion": "2021-11-01",
+              "name": "[parameters('sqlServerName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "administratorLogin": "[parameters('sqlAdminLogin')]",
+                "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
+                "version": "12.0",
+                "minimalTlsVersion": "1.2",
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Sql/servers/firewallRules",
+              "apiVersion": "2021-11-01",
+              "name": "[format('{0}/{1}', parameters('sqlServerName'), 'AllowAllWindowsAzureIps')]",
+              "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Sql/servers/databases",
+              "apiVersion": "2021-11-01",
+              "name": "[format('{0}/{1}', parameters('sqlServerName'), parameters('catalogDbName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Basic",
+                "tier": "Basic",
+                "capacity": 5
+              },
+              "properties": {
+                "maxSizeBytes": 2147483648
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Sql/servers/databases",
+              "apiVersion": "2021-11-01",
+              "name": "[format('{0}/{1}', parameters('sqlServerName'), parameters('identityDbName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Basic",
+                "tier": "Basic",
+                "capacity": 5
+              },
+              "properties": {
+                "maxSizeBytes": 2147483648
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "sqlServerName": {
+              "type": "string",
+              "value": "[parameters('sqlServerName')]"
+            },
+            "sqlServerFqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Sql/servers', parameters('sqlServerName')), '2021-11-01').fullyQualifiedDomainName]"
+            },
+            "catalogDbName": {
+              "type": "string",
+              "value": "[parameters('catalogDbName')]"
+            },
+            "identityDbName": {
+              "type": "string",
+              "value": "[parameters('identityDbName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
       "name": "deploy-api",
       "resourceGroup": "[variables('rgName')]",
       "properties": {
@@ -329,6 +508,21 @@
           "appInsightsConnectionString": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring'), '2025-04-01').outputs.connectionString.value]"
           },
+          "sqlServerFqdn": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.sqlServerFqdn.value]"
+          },
+          "catalogDbName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.catalogDbName.value]"
+          },
+          "identityDbName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.identityDbName.value]"
+          },
+          "sqlAdminLogin": {
+            "value": "[parameters('sqlAdminLogin')]"
+          },
+          "sqlAdminPassword": {
+            "value": "[parameters('sqlAdminPassword')]"
+          },
           "tags": {
             "value": "[union(variables('tags'), createObject('component', 'api'))]"
           }
@@ -340,7 +534,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.47.16.16243",
-              "templateHash": "8909380419011762119"
+              "templateHash": "18314564943004777143"
             }
           },
           "parameters": {
@@ -366,12 +560,28 @@
                 "description": "Application Insights connection string. Empty disables telemetry: the SDK stays registered but ships nothing."
               }
             },
+            "sqlServerFqdn": {
+              "type": "string"
+            },
+            "catalogDbName": {
+              "type": "string"
+            },
+            "identityDbName": {
+              "type": "string"
+            },
+            "sqlAdminLogin": {
+              "type": "string"
+            },
+            "sqlAdminPassword": {
+              "type": "securestring"
+            },
             "tags": {
               "type": "object",
               "defaultValue": {}
             }
           },
           "variables": {
+            "sqlConnectionTemplate": "[format('Server=tcp:{0},1433;User ID={1};Password={2};Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', parameters('sqlServerFqdn'), parameters('sqlAdminLogin'), parameters('sqlAdminPassword'))]",
             "appInsightsSettings": "[if(empty(parameters('appInsightsConnectionString')), createArray(), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', parameters('appInsightsConnectionString'))))]"
           },
           "resources": [
@@ -396,7 +606,19 @@
                     ],
                     "supportCredentials": false
                   },
-                  "appSettings": "[concat(createArray(createObject('name', 'ASPNETCORE_ENVIRONMENT', 'value', 'Development'), createObject('name', 'UseOnlyInMemoryDatabase', 'value', 'true'), createObject('name', 'baseUrls__webBase', 'value', parameters('webBaseUrl')), createObject('name', 'baseUrls__apiBase', 'value', format('https://{0}.azurewebsites.net/api/', parameters('apiAppName')))), variables('appInsightsSettings'))]"
+                  "appSettings": "[concat(createArray(createObject('name', 'ASPNETCORE_ENVIRONMENT', 'value', 'Development'), createObject('name', 'UseOnlyInMemoryDatabase', 'value', 'false'), createObject('name', 'SeedDatabase', 'value', 'false'), createObject('name', 'baseUrls__webBase', 'value', parameters('webBaseUrl')), createObject('name', 'baseUrls__apiBase', 'value', format('https://{0}.azurewebsites.net/api/', parameters('apiAppName')))), variables('appInsightsSettings'))]",
+                  "connectionStrings": [
+                    {
+                      "name": "CatalogConnection",
+                      "type": "SQLAzure",
+                      "connectionString": "[format('{0}Initial Catalog={1};', variables('sqlConnectionTemplate'), parameters('catalogDbName'))]"
+                    },
+                    {
+                      "name": "IdentityConnection",
+                      "type": "SQLAzure",
+                      "connectionString": "[format('{0}Initial Catalog={1};', variables('sqlConnectionTemplate'), parameters('identityDbName'))]"
+                    }
+                  ]
                 }
               }
             }
@@ -420,7 +642,8 @@
       "dependsOn": [
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql')]"
       ]
     },
     {
@@ -675,6 +898,293 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
+      "name": "deploy-cosmos",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "cosmosAccountName": {
+            "value": "[variables('cosmosAccountName')]"
+          },
+          "databaseName": {
+            "value": "[variables('cosmosDatabaseName')]"
+          },
+          "containerName": {
+            "value": "[variables('cosmosContainerName')]"
+          },
+          "tags": {
+            "value": "[union(variables('tags'), createObject('component', 'cosmos'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "14440760020359802042"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "cosmosAccountName": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 44,
+              "metadata": {
+                "description": "Globally unique, 3-44 chars, lowercase letters, digits and hyphens"
+              }
+            },
+            "databaseName": {
+              "type": "string"
+            },
+            "containerName": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts",
+              "apiVersion": "2024-05-15",
+              "name": "[parameters('cosmosAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "GlobalDocumentDB",
+              "properties": {
+                "databaseAccountOfferType": "Standard",
+                "capabilities": [
+                  {
+                    "name": "EnableServerless"
+                  }
+                ],
+                "consistencyPolicy": {
+                  "defaultConsistencyLevel": "Session"
+                },
+                "locations": [
+                  {
+                    "locationName": "[parameters('location')]",
+                    "failoverPriority": 0,
+                    "isZoneRedundant": false
+                  }
+                ],
+                "minimalTlsVersion": "Tls12"
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+              "apiVersion": "2024-05-15",
+              "name": "[format('{0}/{1}', parameters('cosmosAccountName'), parameters('databaseName'))]",
+              "properties": {
+                "resource": {
+                  "id": "[parameters('databaseName')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2024-05-15",
+              "name": "[format('{0}/{1}/{2}', parameters('cosmosAccountName'), parameters('databaseName'), parameters('containerName'))]",
+              "properties": {
+                "resource": {
+                  "id": "[parameters('containerName')]",
+                  "partitionKey": {
+                    "paths": [
+                      "/orderId"
+                    ],
+                    "kind": "Hash",
+                    "version": 2
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('cosmosAccountName'), parameters('databaseName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "cosmosAccountName": {
+              "type": "string",
+              "value": "[parameters('cosmosAccountName')]"
+            },
+            "cosmosEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), '2024-05-15').documentEndpoint]"
+            },
+            "databaseName": {
+              "type": "string",
+              "value": "[parameters('databaseName')]"
+            },
+            "containerName": {
+              "type": "string",
+              "value": "[parameters('containerName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "deploy-delivery-function",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "functionAppName": {
+            "value": "[variables('deliveryFuncAppName')]"
+          },
+          "appServicePlanId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan'), '2025-04-01').outputs.planId.value]"
+          },
+          "storageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "cosmosAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.cosmosAccountName.value]"
+          },
+          "cosmosDatabaseName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.databaseName.value]"
+          },
+          "cosmosContainerName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.containerName.value]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring'), '2025-04-01').outputs.connectionString.value]"
+          },
+          "tags": {
+            "value": "[union(variables('tags'), createObject('component', 'delivery-function'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "2862554457748547452"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "functionAppName": {
+              "type": "string"
+            },
+            "appServicePlanId": {
+              "type": "string",
+              "metadata": {
+                "description": "ID of the App Service Plan to host the function on"
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account used by the Functions host runtime"
+              }
+            },
+            "cosmosAccountName": {
+              "type": "string"
+            },
+            "cosmosDatabaseName": {
+              "type": "string"
+            },
+            "cosmosContainerName": {
+              "type": "string"
+            },
+            "appInsightsConnectionString": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Application Insights connection string. Empty disables telemetry."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {}
+            }
+          },
+          "variables": {
+            "appInsightsSettings": "[if(empty(parameters('appInsightsConnectionString')), createArray(), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', parameters('appInsightsConnectionString'))))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2022-09-01",
+              "name": "[parameters('functionAppName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "functionapp",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[parameters('appServicePlanId')]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "netFrameworkVersion": "v8.0",
+                  "alwaysOn": true,
+                  "ftpsState": "Disabled",
+                  "minTlsVersion": "1.2",
+                  "http20Enabled": true,
+                  "appSettings": "[concat(createArray(createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'dotnet-isolated'), createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'CosmosDb__ConnectionString', 'value', listConnectionStrings(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), '2024-05-15').connectionStrings[0].connectionString), createObject('name', 'CosmosDb__DatabaseName', 'value', parameters('cosmosDatabaseName')), createObject('name', 'CosmosDb__ContainerName', 'value', parameters('cosmosContainerName'))), variables('appInsightsSettings'))]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "functionAppId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+            },
+            "functionAppName": {
+              "type": "string",
+              "value": "[parameters('functionAppName')]"
+            },
+            "functionHostname": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
       "name": "deploy-web",
       "resourceGroup": "[variables('rgName')]",
       "properties": {
@@ -698,6 +1208,24 @@
           "orderItemsReserverUrl": {
             "value": "[variables('orderItemsReserverUrl')]"
           },
+          "deliveryOrderProcessorUrl": {
+            "value": "[variables('deliveryOrderProcessorUrl')]"
+          },
+          "sqlServerFqdn": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.sqlServerFqdn.value]"
+          },
+          "catalogDbName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.catalogDbName.value]"
+          },
+          "identityDbName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.identityDbName.value]"
+          },
+          "sqlAdminLogin": {
+            "value": "[parameters('sqlAdminLogin')]"
+          },
+          "sqlAdminPassword": {
+            "value": "[parameters('sqlAdminPassword')]"
+          },
           "tags": {
             "value": "[union(variables('tags'), createObject('component', 'web'))]"
           }
@@ -709,7 +1237,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.47.16.16243",
-              "templateHash": "718966684969457382"
+              "templateHash": "7933688041244204917"
             }
           },
           "parameters": {
@@ -737,13 +1265,35 @@
                 "description": "Full URL of the OrderItemsReserver HTTP function the Web app calls after an order is created"
               }
             },
+            "deliveryOrderProcessorUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Full URL of the DeliveryOrderProcessor HTTP function the Web app calls after an order is created"
+              }
+            },
+            "sqlServerFqdn": {
+              "type": "string"
+            },
+            "catalogDbName": {
+              "type": "string"
+            },
+            "identityDbName": {
+              "type": "string"
+            },
+            "sqlAdminLogin": {
+              "type": "string"
+            },
+            "sqlAdminPassword": {
+              "type": "securestring"
+            },
             "tags": {
               "type": "object",
               "defaultValue": {}
             }
           },
           "variables": {
-            "webBaseUrl": "[format('https://{0}.azurewebsites.net/', parameters('webAppName'))]"
+            "webBaseUrl": "[format('https://{0}.azurewebsites.net/', parameters('webAppName'))]",
+            "sqlConnectionTemplate": "[format('Server=tcp:{0},1433;User ID={1};Password={2};Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', parameters('sqlServerFqdn'), parameters('sqlAdminLogin'), parameters('sqlAdminPassword'))]"
           },
           "resources": [
             {
@@ -773,7 +1323,7 @@
                     },
                     {
                       "name": "UseOnlyInMemoryDatabase",
-                      "value": "true"
+                      "value": "false"
                     },
                     {
                       "name": "REGION",
@@ -790,6 +1340,22 @@
                     {
                       "name": "OrderItemsReserver__Url",
                       "value": "[parameters('orderItemsReserverUrl')]"
+                    },
+                    {
+                      "name": "DeliveryOrderProcessor__Url",
+                      "value": "[parameters('deliveryOrderProcessorUrl')]"
+                    }
+                  ],
+                  "connectionStrings": [
+                    {
+                      "name": "CatalogConnection",
+                      "type": "SQLAzure",
+                      "connectionString": "[format('{0}Initial Catalog={1};', variables('sqlConnectionTemplate'), parameters('catalogDbName'))]"
+                    },
+                    {
+                      "name": "IdentityConnection",
+                      "type": "SQLAzure",
+                      "connectionString": "[format('{0}Initial Catalog={1};', variables('sqlConnectionTemplate'), parameters('identityDbName'))]"
                     }
                   ]
                 }
@@ -814,7 +1380,8 @@
       },
       "dependsOn": [
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql')]"
       ]
     }
   ],
@@ -829,7 +1396,17 @@
         "functionApp": "[format('https://{0}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-function'), '2025-04-01').outputs.functionHostname.value)]",
         "functionAppName": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-function'), '2025-04-01').outputs.functionAppName.value]",
         "storageAccount": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.storageAccountName.value]",
-        "ordersContainer": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.ordersContainerName.value]"
+        "ordersContainer": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.ordersContainerName.value]",
+        "deliveryFunctionApp": "[format('https://{0}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-delivery-function'), '2025-04-01').outputs.functionHostname.value)]",
+        "deliveryFunctionAppName": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-delivery-function'), '2025-04-01').outputs.functionAppName.value]",
+        "sqlServer": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.sqlServerFqdn.value]",
+        "sqlDatabases": [
+          "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.catalogDbName.value]",
+          "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.identityDbName.value]"
+        ],
+        "cosmosAccount": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.cosmosAccountName.value]",
+        "cosmosDatabase": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.databaseName.value]",
+        "cosmosContainer": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.containerName.value]"
       }
     }
   }
