@@ -97,11 +97,8 @@ jobs:
 
         echo "| 🌐 Web | $(jq -r '.web' summary.json) |" >> $GITHUB_STEP_SUMMARY
         echo "| 🔌 Public API | $(jq -r '.publicApi' summary.json) |" >> $GITHUB_STEP_SUMMARY
-        echo "| ⚡ Function (OrderItemsReserver) | $(jq -r '.functionApp' summary.json) |" >> $GITHUB_STEP_SUMMARY
-        echo "| 📦 Function (DeliveryOrderProcessor) | $(jq -r '.deliveryFunctionApp' summary.json) |" >> $GITHUB_STEP_SUMMARY
         echo "| 🛢️ Azure SQL | $(jq -r '.sqlServer' summary.json) |" >> $GITHUB_STEP_SUMMARY
-        echo "| 🌌 Cosmos DB | $(jq -r '.cosmosAccount' summary.json) / $(jq -r '.cosmosDatabase' summary.json) / $(jq -r '.cosmosContainer' summary.json) |" >> $GITHUB_STEP_SUMMARY
-        echo "| 🗄️ Storage account | $(jq -r '.storageAccount' summary.json) / $(jq -r '.ordersContainer' summary.json) |" >> $GITHUB_STEP_SUMMARY
+        echo "| 🔑 Key Vault | $(jq -r '.keyVault' summary.json) |" >> $GITHUB_STEP_SUMMARY
 
     - name: 💾 Save URLs as Artifact
       run: |

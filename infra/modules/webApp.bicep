@@ -9,26 +9,16 @@ param appServicePlanId string
 @description('Absolute base URL of the Public API, including trailing slash')
 param apiBaseUrl string
 
-@description('Full URL of the OrderItemsReserver HTTP function the Web app calls after an order is created')
-param orderItemsReserverUrl string
+@description('Key Vault secret URI of the catalog database connection string')
+param catalogConnectionSecretUri string
 
-@description('Full URL of the DeliveryOrderProcessor HTTP function the Web app calls after an order is created')
-param deliveryOrderProcessorUrl string
-
-param sqlServerFqdn string
-param catalogDbName string
-param identityDbName string
-param sqlAdminLogin string
-
-@secure()
-param sqlAdminPassword string
+@description('Key Vault secret URI of the identity database connection string')
+param identityConnectionSecretUri string
 
 param tags object = {}
 
 // Self-referential, so derived from the name rather than the resource to avoid a cycle
 var webBaseUrl = 'https://${webAppName}.azurewebsites.net/'
-
-var sqlConnectionTemplate = 'Server=tcp:${sqlServerFqdn},1433;User ID=${sqlAdminLogin};Password=${sqlAdminPassword};Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
 
 resource webApp 'Microsoft.Web/sites@2022-09-01' = {
   name: webAppName
@@ -74,27 +64,16 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'baseUrls__webBase'
           value: webBaseUrl
         }
+        // Key Vault references: App Service resolves them with the app's managed identity and hands the
+        // secret value to the app, so no code change is needed. ConnectionStrings__X is read by the app
+        // as ConnectionStrings:X. The access policy that allows the read is in keyVaultAccessPolicy.bicep.
         {
-          name: 'OrderItemsReserver__Url'
-          value: orderItemsReserverUrl
+          name: 'ConnectionStrings__CatalogConnection'
+          value: '@Microsoft.KeyVault(SecretUri=${catalogConnectionSecretUri})'
         }
         {
-          name: 'DeliveryOrderProcessor__Url'
-          value: deliveryOrderProcessorUrl
-        }
-      ]
-
-      // Exposed to the app as ConnectionStrings:CatalogConnection / ConnectionStrings:IdentityConnection
-      connectionStrings: [
-        {
-          name: 'CatalogConnection'
-          type: 'SQLAzure'
-          connectionString: '${sqlConnectionTemplate}Initial Catalog=${catalogDbName};'
-        }
-        {
-          name: 'IdentityConnection'
-          type: 'SQLAzure'
-          connectionString: '${sqlConnectionTemplate}Initial Catalog=${identityDbName};'
+          name: 'ConnectionStrings__IdentityConnection'
+          value: '@Microsoft.KeyVault(SecretUri=${identityConnectionSecretUri})'
         }
       ]
     }
@@ -104,3 +83,4 @@ resource webApp 'Microsoft.Web/sites@2022-09-01' = {
 output webAppId string        = webApp.id
 output webAppName string      = webApp.name
 output webAppHostname string  = webApp.properties.defaultHostName
+output webAppPrincipalId string = webApp.identity.principalId

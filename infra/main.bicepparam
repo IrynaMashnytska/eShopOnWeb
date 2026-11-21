@@ -6,7 +6,6 @@ param projectName   = 'eshop'
 param location      = 'westeurope'
 param appServiceSku = 'S1'
 param sqlLocation   = 'germanywestcentral'
-param cosmosLocation = 'germanywestcentral'
 
 // Never commit the password: the workflow supplies it from the SQL_ADMIN_PASSWORD secret
 param sqlAdminPassword = readEnvironmentVariable('SQL_ADMIN_PASSWORD')

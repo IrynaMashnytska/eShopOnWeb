@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.47.16.16243",
-      "templateHash": "1415096964486353839"
+      "templateHash": "1096758567047053123"
     }
   },
   "parameters": {
@@ -39,13 +39,6 @@
         "description": "Region for the Azure SQL server and databases"
       }
     },
-    "cosmosLocation": {
-      "type": "string",
-      "defaultValue": "germanywestcentral",
-      "metadata": {
-        "description": "Region for the Cosmos DB account"
-      }
-    },
     "sqlAdminLogin": {
       "type": "string",
       "defaultValue": "eshopadmin",
@@ -65,20 +58,12 @@
     "rgName": "[format('rg-{0}-{1}', parameters('projectName'), parameters('environment'))]",
     "apiAppName": "[format('api-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
     "webAppName": "[format('web-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
-    "funcAppName": "[format('func-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
-    "storageName": "[take(format('st{0}{1}{2}', parameters('projectName'), parameters('environment'), variables('suffix')), 24)]",
-    "deliveryFuncAppName": "[format('func-delivery-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix'))]",
+    "keyVaultName": "[take(format('kv-{0}-{1}-{2}', parameters('projectName'), parameters('environment'), variables('suffix')), 24)]",
     "sqlServerName": "[format('sql-{0}-{1}-{2}-{3}', parameters('projectName'), parameters('environment'), variables('suffix'), parameters('sqlLocation'))]",
-    "cosmosAccountName": "[format('cosmos-{0}-{1}-{2}-{3}', parameters('projectName'), parameters('environment'), variables('suffix'), parameters('cosmosLocation'))]",
     "catalogDbName": "CatalogDb",
     "identityDbName": "IdentityDb",
-    "cosmosDatabaseName": "delivery",
-    "cosmosContainerName": "orders",
-    "ordersContainerName": "order-requests",
     "apiBaseUrl": "[format('https://{0}.azurewebsites.net/api/', variables('apiAppName'))]",
     "webBaseUrl": "[format('https://{0}.azurewebsites.net/', variables('webAppName'))]",
-    "orderItemsReserverUrl": "[format('https://{0}.azurewebsites.net/api/OrderItemsReserver', variables('funcAppName'))]",
-    "deliveryOrderProcessorUrl": "[format('https://{0}.azurewebsites.net/api/DeliveryOrderProcessor', variables('deliveryFuncAppName'))]",
     "tags": {
       "environment": "[parameters('environment')]",
       "project": "[parameters('projectName')]",
@@ -663,7 +648,7 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
-      "name": "deploy-storage",
+      "name": "deploy-keyvault",
       "resourceGroup": "[variables('rgName')]",
       "properties": {
         "expressionEvaluationOptions": {
@@ -674,14 +659,26 @@
           "location": {
             "value": "[parameters('location')]"
           },
-          "storageAccountName": {
-            "value": "[variables('storageName')]"
+          "keyVaultName": {
+            "value": "[variables('keyVaultName')]"
           },
-          "ordersContainerName": {
-            "value": "[variables('ordersContainerName')]"
+          "sqlServerFqdn": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.sqlServerFqdn.value]"
+          },
+          "catalogDbName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.catalogDbName.value]"
+          },
+          "identityDbName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.identityDbName.value]"
+          },
+          "sqlAdminLogin": {
+            "value": "[parameters('sqlAdminLogin')]"
+          },
+          "sqlAdminPassword": {
+            "value": "[parameters('sqlAdminPassword')]"
           },
           "tags": {
-            "value": "[union(variables('tags'), createObject('component', 'storage'))]"
+            "value": "[union(variables('tags'), createObject('component', 'keyvault'))]"
           }
         },
         "template": {
@@ -691,167 +688,30 @@
             "_generator": {
               "name": "bicep",
               "version": "0.47.16.16243",
-              "templateHash": "9870674650116368515"
+              "templateHash": "11052451371688755649"
             }
           },
           "parameters": {
             "location": {
               "type": "string"
             },
-            "storageAccountName": {
-              "type": "string",
-              "minLength": 3,
-              "maxLength": 24,
-              "metadata": {
-                "description": "Globally unique, 3-24 chars, lowercase letters and digits only"
-              }
-            },
-            "ordersContainerName": {
-              "type": "string",
-              "defaultValue": "order-requests",
-              "metadata": {
-                "description": "Container that receives one JSON file per order"
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {}
-            }
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Storage/storageAccounts",
-              "apiVersion": "2023-01-01",
-              "name": "[parameters('storageAccountName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "kind": "StorageV2",
-              "sku": {
-                "name": "Standard_LRS"
-              },
-              "properties": {
-                "accessTier": "Hot",
-                "minimumTlsVersion": "TLS1_2",
-                "supportsHttpsTrafficOnly": true,
-                "allowBlobPublicAccess": false,
-                "allowSharedKeyAccess": true
-              }
-            },
-            {
-              "type": "Microsoft.Storage/storageAccounts/blobServices",
-              "apiVersion": "2023-01-01",
-              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-              ]
-            },
-            {
-              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-              "apiVersion": "2023-01-01",
-              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('ordersContainerName'))]",
-              "properties": {
-                "publicAccess": "None"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
-              ]
-            }
-          ],
-          "outputs": {
-            "storageAccountId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-            },
-            "storageAccountName": {
-              "type": "string",
-              "value": "[parameters('storageAccountName')]"
-            },
-            "blobEndpoint": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').primaryEndpoints.blob]"
-            },
-            "ordersContainerName": {
-              "type": "string",
-              "value": "[parameters('ordersContainerName')]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "deploy-function",
-      "resourceGroup": "[variables('rgName')]",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "functionAppName": {
-            "value": "[variables('funcAppName')]"
-          },
-          "appServicePlanId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan'), '2025-04-01').outputs.planId.value]"
-          },
-          "storageAccountName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.storageAccountName.value]"
-          },
-          "ordersContainerName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.ordersContainerName.value]"
-          },
-          "appInsightsConnectionString": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring'), '2025-04-01').outputs.connectionString.value]"
-          },
-          "tags": {
-            "value": "[union(variables('tags'), createObject('component', 'function'))]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.47.16.16243",
-              "templateHash": "6137593814801590580"
-            }
-          },
-          "parameters": {
-            "location": {
+            "keyVaultName": {
               "type": "string"
             },
-            "functionAppName": {
+            "sqlServerFqdn": {
               "type": "string"
             },
-            "appServicePlanId": {
-              "type": "string",
-              "metadata": {
-                "description": "ID of the App Service Plan to host the function on"
-              }
-            },
-            "storageAccountName": {
-              "type": "string",
-              "metadata": {
-                "description": "Storage account used by the Functions host and as the order request destination"
-              }
-            },
-            "ordersContainerName": {
+            "catalogDbName": {
               "type": "string"
             },
-            "appInsightsConnectionString": {
-              "type": "securestring",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Application Insights connection string. Empty disables telemetry."
-              }
+            "identityDbName": {
+              "type": "string"
+            },
+            "sqlAdminLogin": {
+              "type": "string"
+            },
+            "sqlAdminPassword": {
+              "type": "securestring"
             },
             "tags": {
               "type": "object",
@@ -859,341 +719,69 @@
             }
           },
           "variables": {
-            "appInsightsSettings": "[if(empty(parameters('appInsightsConnectionString')), createArray(), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', parameters('appInsightsConnectionString'))))]"
+            "sqlConnectionTemplate": "[format('Server=tcp:{0},1433;User ID={1};Password={2};Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', parameters('sqlServerFqdn'), parameters('sqlAdminLogin'), parameters('sqlAdminPassword'))]"
           },
           "resources": [
             {
-              "type": "Microsoft.Web/sites",
-              "apiVersion": "2022-09-01",
-              "name": "[parameters('functionAppName')]",
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2023-07-01",
+              "name": "[parameters('keyVaultName')]",
               "location": "[parameters('location')]",
               "tags": "[parameters('tags')]",
-              "kind": "functionapp",
-              "identity": {
-                "type": "SystemAssigned"
-              },
               "properties": {
-                "serverFarmId": "[parameters('appServicePlanId')]",
-                "httpsOnly": true,
-                "siteConfig": {
-                  "netFrameworkVersion": "v8.0",
-                  "alwaysOn": true,
-                  "ftpsState": "Disabled",
-                  "minTlsVersion": "1.2",
-                  "http20Enabled": true,
-                  "appSettings": "[concat(createArray(createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'dotnet-isolated'), createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'OrderContainerName', 'value', parameters('ordersContainerName'))), variables('appInsightsSettings'))]"
-                }
-              }
-            }
-          ],
-          "outputs": {
-            "functionAppId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
-            },
-            "functionAppName": {
-              "type": "string",
-              "value": "[parameters('functionAppName')]"
-            },
-            "functionHostname": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01').defaultHostName]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "deploy-cosmos",
-      "resourceGroup": "[variables('rgName')]",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('cosmosLocation')]"
-          },
-          "cosmosAccountName": {
-            "value": "[variables('cosmosAccountName')]"
-          },
-          "databaseName": {
-            "value": "[variables('cosmosDatabaseName')]"
-          },
-          "containerName": {
-            "value": "[variables('cosmosContainerName')]"
-          },
-          "tags": {
-            "value": "[union(variables('tags'), createObject('component', 'cosmos'))]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.47.16.16243",
-              "templateHash": "14440760020359802042"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string"
-            },
-            "cosmosAccountName": {
-              "type": "string",
-              "minLength": 3,
-              "maxLength": 44,
-              "metadata": {
-                "description": "Globally unique, 3-44 chars, lowercase letters, digits and hyphens"
-              }
-            },
-            "databaseName": {
-              "type": "string"
-            },
-            "containerName": {
-              "type": "string"
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {}
-            }
-          },
-          "resources": [
-            {
-              "type": "Microsoft.DocumentDB/databaseAccounts",
-              "apiVersion": "2024-05-15",
-              "name": "[parameters('cosmosAccountName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "kind": "GlobalDocumentDB",
-              "properties": {
-                "databaseAccountOfferType": "Standard",
-                "capabilities": [
-                  {
-                    "name": "EnableServerless"
-                  }
-                ],
-                "consistencyPolicy": {
-                  "defaultConsistencyLevel": "Session"
+                "tenantId": "[subscription().tenantId]",
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
                 },
-                "locations": [
-                  {
-                    "locationName": "[parameters('location')]",
-                    "failoverPriority": 0,
-                    "isZoneRedundant": false
-                  }
-                ],
-                "minimalTlsVersion": "Tls12"
+                "enableRbacAuthorization": false,
+                "accessPolicies": [],
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 7
               }
             },
             {
-              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
-              "apiVersion": "2024-05-15",
-              "name": "[format('{0}/{1}', parameters('cosmosAccountName'), parameters('databaseName'))]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'CatalogConnection')]",
               "properties": {
-                "resource": {
-                  "id": "[parameters('databaseName')]"
-                }
+                "value": "[format('{0}Initial Catalog={1};', variables('sqlConnectionTemplate'), parameters('catalogDbName'))]"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName'))]"
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
               ]
             },
             {
-              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
-              "apiVersion": "2024-05-15",
-              "name": "[format('{0}/{1}/{2}', parameters('cosmosAccountName'), parameters('databaseName'), parameters('containerName'))]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'IdentityConnection')]",
               "properties": {
-                "resource": {
-                  "id": "[parameters('containerName')]",
-                  "partitionKey": {
-                    "paths": [
-                      "/orderId"
-                    ],
-                    "kind": "Hash",
-                    "version": 2
-                  }
-                }
+                "value": "[format('{0}Initial Catalog={1};', variables('sqlConnectionTemplate'), parameters('identityDbName'))]"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', parameters('cosmosAccountName'), parameters('databaseName'))]"
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
               ]
             }
           ],
           "outputs": {
-            "cosmosAccountName": {
+            "keyVaultName": {
               "type": "string",
-              "value": "[parameters('cosmosAccountName')]"
+              "value": "[parameters('keyVaultName')]"
             },
-            "cosmosEndpoint": {
+            "catalogSecretUri": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), '2024-05-15').documentEndpoint]"
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'CatalogConnection'), '2023-07-01').secretUri]"
             },
-            "databaseName": {
+            "identitySecretUri": {
               "type": "string",
-              "value": "[parameters('databaseName')]"
-            },
-            "containerName": {
-              "type": "string",
-              "value": "[parameters('containerName')]"
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'IdentityConnection'), '2023-07-01').secretUri]"
             }
           }
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "deploy-delivery-function",
-      "resourceGroup": "[variables('rgName')]",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "functionAppName": {
-            "value": "[variables('deliveryFuncAppName')]"
-          },
-          "appServicePlanId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan'), '2025-04-01').outputs.planId.value]"
-          },
-          "storageAccountName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.storageAccountName.value]"
-          },
-          "cosmosAccountName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.cosmosAccountName.value]"
-          },
-          "cosmosDatabaseName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.databaseName.value]"
-          },
-          "cosmosContainerName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.containerName.value]"
-          },
-          "appInsightsConnectionString": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring'), '2025-04-01').outputs.connectionString.value]"
-          },
-          "tags": {
-            "value": "[union(variables('tags'), createObject('component', 'delivery-function'))]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.47.16.16243",
-              "templateHash": "2862554457748547452"
-            }
-          },
-          "parameters": {
-            "location": {
-              "type": "string"
-            },
-            "functionAppName": {
-              "type": "string"
-            },
-            "appServicePlanId": {
-              "type": "string",
-              "metadata": {
-                "description": "ID of the App Service Plan to host the function on"
-              }
-            },
-            "storageAccountName": {
-              "type": "string",
-              "metadata": {
-                "description": "Storage account used by the Functions host runtime"
-              }
-            },
-            "cosmosAccountName": {
-              "type": "string"
-            },
-            "cosmosDatabaseName": {
-              "type": "string"
-            },
-            "cosmosContainerName": {
-              "type": "string"
-            },
-            "appInsightsConnectionString": {
-              "type": "securestring",
-              "defaultValue": "",
-              "metadata": {
-                "description": "Application Insights connection string. Empty disables telemetry."
-              }
-            },
-            "tags": {
-              "type": "object",
-              "defaultValue": {}
-            }
-          },
-          "variables": {
-            "appInsightsSettings": "[if(empty(parameters('appInsightsConnectionString')), createArray(), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', parameters('appInsightsConnectionString'))))]"
-          },
-          "resources": [
-            {
-              "type": "Microsoft.Web/sites",
-              "apiVersion": "2022-09-01",
-              "name": "[parameters('functionAppName')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "kind": "functionapp",
-              "identity": {
-                "type": "SystemAssigned"
-              },
-              "properties": {
-                "serverFarmId": "[parameters('appServicePlanId')]",
-                "httpsOnly": true,
-                "siteConfig": {
-                  "netFrameworkVersion": "v8.0",
-                  "alwaysOn": true,
-                  "ftpsState": "Disabled",
-                  "minTlsVersion": "1.2",
-                  "http20Enabled": true,
-                  "appSettings": "[concat(createArray(createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'dotnet-isolated'), createObject('name', 'AzureWebJobsStorage', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-01-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'CosmosDb__ConnectionString', 'value', listConnectionStrings(resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('cosmosAccountName')), '2024-05-15').connectionStrings[0].connectionString), createObject('name', 'CosmosDb__DatabaseName', 'value', parameters('cosmosDatabaseName')), createObject('name', 'CosmosDb__ContainerName', 'value', parameters('cosmosContainerName'))), variables('appInsightsSettings'))]"
-                }
-              }
-            }
-          ],
-          "outputs": {
-            "functionAppId": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
-            },
-            "functionAppName": {
-              "type": "string",
-              "value": "[parameters('functionAppName')]"
-            },
-            "functionHostname": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01').defaultHostName]"
-            }
-          }
-        }
-      },
-      "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring')]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage')]"
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql')]"
       ]
     },
     {
@@ -1219,26 +807,11 @@
           "apiBaseUrl": {
             "value": "[variables('apiBaseUrl')]"
           },
-          "orderItemsReserverUrl": {
-            "value": "[variables('orderItemsReserverUrl')]"
+          "catalogConnectionSecretUri": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-keyvault'), '2025-04-01').outputs.catalogSecretUri.value]"
           },
-          "deliveryOrderProcessorUrl": {
-            "value": "[variables('deliveryOrderProcessorUrl')]"
-          },
-          "sqlServerFqdn": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.sqlServerFqdn.value]"
-          },
-          "catalogDbName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.catalogDbName.value]"
-          },
-          "identityDbName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.identityDbName.value]"
-          },
-          "sqlAdminLogin": {
-            "value": "[parameters('sqlAdminLogin')]"
-          },
-          "sqlAdminPassword": {
-            "value": "[parameters('sqlAdminPassword')]"
+          "identityConnectionSecretUri": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-keyvault'), '2025-04-01').outputs.identitySecretUri.value]"
           },
           "tags": {
             "value": "[union(variables('tags'), createObject('component', 'web'))]"
@@ -1251,7 +824,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.47.16.16243",
-              "templateHash": "7933688041244204917"
+              "templateHash": "7278756539070472795"
             }
           },
           "parameters": {
@@ -1273,32 +846,17 @@
                 "description": "Absolute base URL of the Public API, including trailing slash"
               }
             },
-            "orderItemsReserverUrl": {
+            "catalogConnectionSecretUri": {
               "type": "string",
               "metadata": {
-                "description": "Full URL of the OrderItemsReserver HTTP function the Web app calls after an order is created"
+                "description": "Key Vault secret URI of the catalog database connection string"
               }
             },
-            "deliveryOrderProcessorUrl": {
+            "identityConnectionSecretUri": {
               "type": "string",
               "metadata": {
-                "description": "Full URL of the DeliveryOrderProcessor HTTP function the Web app calls after an order is created"
+                "description": "Key Vault secret URI of the identity database connection string"
               }
-            },
-            "sqlServerFqdn": {
-              "type": "string"
-            },
-            "catalogDbName": {
-              "type": "string"
-            },
-            "identityDbName": {
-              "type": "string"
-            },
-            "sqlAdminLogin": {
-              "type": "string"
-            },
-            "sqlAdminPassword": {
-              "type": "securestring"
             },
             "tags": {
               "type": "object",
@@ -1306,8 +864,7 @@
             }
           },
           "variables": {
-            "webBaseUrl": "[format('https://{0}.azurewebsites.net/', parameters('webAppName'))]",
-            "sqlConnectionTemplate": "[format('Server=tcp:{0},1433;User ID={1};Password={2};Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', parameters('sqlServerFqdn'), parameters('sqlAdminLogin'), parameters('sqlAdminPassword'))]"
+            "webBaseUrl": "[format('https://{0}.azurewebsites.net/', parameters('webAppName'))]"
           },
           "resources": [
             {
@@ -1352,24 +909,12 @@
                       "value": "[variables('webBaseUrl')]"
                     },
                     {
-                      "name": "OrderItemsReserver__Url",
-                      "value": "[parameters('orderItemsReserverUrl')]"
+                      "name": "ConnectionStrings__CatalogConnection",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('catalogConnectionSecretUri'))]"
                     },
                     {
-                      "name": "DeliveryOrderProcessor__Url",
-                      "value": "[parameters('deliveryOrderProcessorUrl')]"
-                    }
-                  ],
-                  "connectionStrings": [
-                    {
-                      "name": "CatalogConnection",
-                      "type": "SQLAzure",
-                      "connectionString": "[format('{0}Initial Catalog={1};', variables('sqlConnectionTemplate'), parameters('catalogDbName'))]"
-                    },
-                    {
-                      "name": "IdentityConnection",
-                      "type": "SQLAzure",
-                      "connectionString": "[format('{0}Initial Catalog={1};', variables('sqlConnectionTemplate'), parameters('identityDbName'))]"
+                      "name": "ConnectionStrings__IdentityConnection",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('identityConnectionSecretUri'))]"
                     }
                   ]
                 }
@@ -1388,14 +933,86 @@
             "webAppHostname": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.Web/sites', parameters('webAppName')), '2022-09-01').defaultHostName]"
+            },
+            "webAppPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('webAppName')), '2022-09-01', 'full').identity.principalId]"
             }
           }
         }
       },
       "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-keyvault')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-plan')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "deploy-web-keyvault-access",
+      "resourceGroup": "[variables('rgName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-keyvault'), '2025-04-01').outputs.keyVaultName.value]"
+          },
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-web'), '2025-04-01').outputs.webAppPrincipalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.47.16.16243",
+              "templateHash": "12614919562008926901"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string"
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Object (principal) ID of the app's system-assigned managed identity"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults/accessPolicies",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'add')]",
+              "properties": {
+                "accessPolicies": [
+                  {
+                    "tenantId": "[subscription().tenantId]",
+                    "objectId": "[parameters('principalId')]",
+                    "permissions": {
+                      "secrets": [
+                        "get",
+                        "list"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-keyvault')]",
         "[subscriptionResourceId('Microsoft.Resources/resourceGroups', variables('rgName'))]",
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql')]"
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-web')]"
       ]
     }
   ],
@@ -1407,20 +1024,12 @@
         "publicApi": "[format('https://{0}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-api'), '2025-04-01').outputs.apiHostname.value)]",
         "web": "[format('https://{0}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-web'), '2025-04-01').outputs.webAppHostname.value)]",
         "appInsights": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-monitoring'), '2025-04-01').outputs.appInsightsName.value]",
-        "functionApp": "[format('https://{0}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-function'), '2025-04-01').outputs.functionHostname.value)]",
-        "functionAppName": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-function'), '2025-04-01').outputs.functionAppName.value]",
-        "storageAccount": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.storageAccountName.value]",
-        "ordersContainer": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-storage'), '2025-04-01').outputs.ordersContainerName.value]",
-        "deliveryFunctionApp": "[format('https://{0}', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-delivery-function'), '2025-04-01').outputs.functionHostname.value)]",
-        "deliveryFunctionAppName": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-delivery-function'), '2025-04-01').outputs.functionAppName.value]",
         "sqlServer": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.sqlServerFqdn.value]",
         "sqlDatabases": [
           "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.catalogDbName.value]",
           "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-sql'), '2025-04-01').outputs.identityDbName.value]"
         ],
-        "cosmosAccount": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.cosmosAccountName.value]",
-        "cosmosDatabase": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.databaseName.value]",
-        "cosmosContainer": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-cosmos'), '2025-04-01').outputs.containerName.value]"
+        "keyVault": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('rgName')), 'Microsoft.Resources/deployments', 'deploy-keyvault'), '2025-04-01').outputs.keyVaultName.value]"
       }
     }
   }
